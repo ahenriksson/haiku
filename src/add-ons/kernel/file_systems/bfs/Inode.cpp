@@ -2787,6 +2787,20 @@ Inode::Create(Transaction& transaction, Inode* parent, const char* name,
 	return B_OK;
 }
 
+status_t
+Inode::Copy(Transaction& transaction, off_t targetBlock)
+{
+	NodeGetter target(fVolume);
+	uint8* targetData = target.SetToWritable(transaction, targetBlock, true);
+
+	CachedBlock source(fVolume, fID);
+	memcpy(targetData, source.Block(), fVolume->BlockSize());
+
+	// update inode ID in target block
+	target.WritableNode()->inode_num = fVolume->ToBlockRun(targetBlock);
+
+	return B_OK;
+}
 
 //	#pragma mark - AttributeIterator
 

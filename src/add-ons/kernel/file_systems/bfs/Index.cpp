@@ -384,3 +384,21 @@ Index::UpdateLastModified(Transaction& transaction, Inode* inode,
 	return status;
 }
 
+
+status_t
+Index::UpdateInode(Transaction& transaction, const uint8* key, uint16 length,
+	off_t oldInodeID, off_t newInodeID)
+{
+	// remove node and insert it with the new id
+	BPlusTree* tree = Node()->Tree();
+	status_t status = tree->Remove(transaction, key, length, oldInodeID);
+
+	if (status == B_ENTRY_NOT_FOUND)
+		return B_OK;
+
+	if (status != B_OK)
+		return status;
+
+	return tree->Insert(transaction, key, length, newInodeID);
+}
+

@@ -166,6 +166,8 @@ public:
 									ino_t* _id = NULL, Inode** _inode = NULL,
 									fs_vnode_ops* vnodeOps = NULL,
 									uint32 publishFlags = 0);
+			status_t			Copy(Transaction& transaction,
+									off_t targetBlock);
 
 			// index maintaining helper
 			void				UpdateOldSize() { fOldSize = Size(); }

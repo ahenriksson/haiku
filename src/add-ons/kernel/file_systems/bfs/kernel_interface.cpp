@@ -613,6 +613,148 @@ bfs_get_vnode_name(fs_volume* _volume, fs_vnode* _node, char* buffer,
 
 
 static status_t
+bfs_resize_update_index_references(Transaction& transaction, Inode* inode,
+	off_t newInodeID)
+{
+	// update user file attributes
+	AttributeIterator iterator(inode);
+
+	char attributeName[B_FILE_NAME_LENGTH];
+	size_t nameLength;
+	uint32 attributeType;
+	ino_t attributeID;
+
+	uint8 key[BPLUSTREE_MAX_KEY_LENGTH];
+	size_t keyLength;
+
+	status_t status;
+	Index index(inode->GetVolume());
+
+	while (iterator.GetNext(attributeName, &nameLength, &attributeType,
+			&attributeID) == B_OK) {
+		// ignore attribute if not in index
+		if (index.SetTo(attributeName) != B_OK)
+			continue;
+
+		status = inode->ReadAttribute(attributeName, attributeType, 0, key,
+			&keyLength);
+		if (status != B_OK)
+			return status;
+
+		status = index.UpdateInode(transaction, key, (uint16)keyLength,
+			inode->ID(), newInodeID);
+		if (status != B_OK)
+			return status;
+	}
+
+	// update built-in attributes
+	if (inode->InNameIndex()) {
+		status = index.SetTo("name");
+		if (status != B_OK)
+			return status;
+
+		status = inode->GetName((char*)key, BPLUSTREE_MAX_KEY_LENGTH);
+		if (status != B_OK)
+			return status;
+
+		status = index.UpdateInode(transaction, key, (uint16)strlen((char*)key),
+			inode->ID(), newInodeID);
+		if (status != B_OK)
+			return status;
+	}
+	if (inode->InSizeIndex()) {
+		status = index.SetTo("size");
+		if (status != B_OK)
+			return status;
+
+		off_t size = inode->Size();
+		status = index.UpdateInode(transaction, (uint8*)&size, sizeof(int64),
+			inode->ID(), newInodeID);
+		if (status != B_OK)
+			return status;
+	}
+	if (inode->InLastModifiedIndex()) {
+		status = index.SetTo("last_modified");
+		if (status != B_OK)
+			return status;
+
+		off_t modified = inode->LastModified();
+		status = index.UpdateInode(transaction, (uint8*)&modified,
+			sizeof(int64), inode->ID(), newInodeID);
+		if (status != B_OK)
+			return status;
+	}
+	return B_OK;
+}
+
+
+static status_t
+bfs_resize_update_parent(Transaction& transaction, Inode* inode,
+	off_t newInodeID)
+{
+	Volume* volume = inode->GetVolume();
+
+	// get name of this inode
+	char name[B_FILE_NAME_LENGTH];
+	status_t status = inode->GetName(name, B_FILE_NAME_LENGTH);
+	if (status != B_OK)
+		return status;
+
+	// get Inode of parent
+	block_run parentBlockRun = inode->Parent();
+	off_t parentBlock = parentBlockRun.Start()
+		+ (parentBlockRun.AllocationGroup()
+		<< volume->AllocationGroupShift());
+
+	Vnode parentVnode(volume, parentBlock);
+	Inode* parent;
+	status = parentVnode.Get(&parent);
+	if (status != B_OK)
+		return status;
+
+	// update inode id in parent
+	BPlusTree* tree = parent->Tree();
+	return tree->Replace(transaction, (const uint8*)name, (uint16)strlen(name),
+		newInodeID);
+}
+
+
+static status_t
+bfs_resize_move_inode(Volume* volume, Inode* inode)
+{
+	Transaction transaction(volume, 0 /* what's this? */);
+
+	block_run run;
+	status_t status = volume->Allocator().AllocateBlocks(transaction, 0, 0, 1,
+		1, run);
+		// we don't care about where we move at the moment
+	if (status != B_OK)
+		return status;
+
+	off_t newInodeID = run.Start()
+		+ (run.AllocationGroup() << volume->AllocationGroupShift());
+
+	status = inode->Copy(transaction, newInodeID);
+	if (status != B_OK)
+		return status;
+
+	status = bfs_resize_update_parent(transaction, inode, newInodeID);
+	if (status != B_OK)
+		return status;
+
+	status = bfs_resize_update_index_references(transaction, inode, newInodeID);
+	if (status != B_OK)
+		return status;
+
+	status = volume->Free(transaction, inode->BlockRun());
+	if (status != B_OK)
+		return status;
+
+	return transaction.Done();
+}
+
+
+static status_t
 bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 	void* buffer, size_t bufferLength)
 {
@@ -688,6 +830,15 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 				return B_BAD_ADDRESS;
 
 			return volume->WriteSuperBlock();
+		}
+		case 56743:
+		{
+			// move inode
+			Vnode vnode(volume, 692);
+			Inode *inode;
+			vnode.Get(&inode);
+			bfs_resize_move_inode(volume, inode);
+			return B_OK;
 		}
 
 #ifdef DEBUG_FRAGMENTER

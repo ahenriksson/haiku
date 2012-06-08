@@ -53,6 +53,10 @@ public:
 			status_t		UpdateLastModified(Transaction& transaction,
 								Inode* inode, bigtime_t modified = -1);
 
+			status_t		UpdateInode(Transaction& transaction,
+								const uint8* key, uint16 length,
+								off_t oldInodeId, off_t newInodeId);
+
 private:
 							Index(const Index& other);
 							Index& operator=(const Index& other);
