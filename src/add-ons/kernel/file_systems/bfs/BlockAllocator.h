@@ -44,7 +44,8 @@ public:
 
 			status_t		AllocateBlocks(Transaction& transaction,
 								int32 group, uint16 start, uint16 numBlocks,
-								uint16 minimum, block_run& run);
+								uint16 minimum, block_run& run,
+								off_t beginBlock = 0, off_t endBlock = 0);
 
 			status_t		StartChecking(const check_control* control);
 			status_t		StopChecking(check_control* control);
