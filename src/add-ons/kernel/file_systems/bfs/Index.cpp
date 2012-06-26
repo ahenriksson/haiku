@@ -17,7 +17,8 @@
 Index::Index(Volume* volume)
 	:
 	fVolume(volume),
-	fNode(NULL)
+	fNode(NULL),
+	fName(NULL)
 {
 }
 
