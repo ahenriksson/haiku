@@ -39,7 +39,8 @@ public:
 								block_run& run);
 			status_t		Allocate(Transaction& transaction, Inode* inode,
 								off_t numBlocks, block_run& run,
-								uint16 minimum = 1);
+								uint16 minimum = 1, off_t beginBlock = 0,
+								off_t endBlock = 0);
 			status_t		Free(Transaction& transaction, block_run run);
 
 			status_t		AllocateBlocks(Transaction& transaction,

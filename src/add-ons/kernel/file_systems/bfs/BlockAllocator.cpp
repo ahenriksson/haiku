@@ -1020,7 +1020,8 @@ BlockAllocator::AllocateForInode(Transaction& transaction,
 
 status_t
 BlockAllocator::Allocate(Transaction& transaction, Inode* inode,
-	off_t numBlocks, block_run& run, uint16 minimum)
+	off_t numBlocks, block_run& run, uint16 minimum, off_t beginBlock,
+	off_t endBlock)
 {
 	if (numBlocks <= 0)
 		return B_ERROR;
@@ -1073,7 +1074,8 @@ BlockAllocator::Allocate(Transaction& transaction, Inode* inode,
 		group = inode->BlockRun().AllocationGroup() + 1;
 	}
 
-	return AllocateBlocks(transaction, group, start, numBlocks, minimum, run);
+	return AllocateBlocks(transaction, group, start, numBlocks, minimum, run,
+		beginBlock, endBlock);
 }
 
 

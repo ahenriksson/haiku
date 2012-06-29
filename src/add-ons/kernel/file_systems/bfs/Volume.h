@@ -108,7 +108,8 @@ public:
 								block_run& run);
 			status_t		Allocate(Transaction& transaction, Inode* inode,
 								off_t numBlocks, block_run& run,
-								uint16 minimum = 1);
+								uint16 minimum = 1, off_t beginBlock = 0,
+								off_t endBlock = 0);
 			status_t		Free(Transaction& transaction, block_run run);
 			void			SetCheckingThread(thread_id thread)
 								{ fCheckingThread = thread; }
@@ -207,10 +208,10 @@ Volume::AllocateForInode(Transaction& transaction, const block_run* parent,
 
 inline status_t
 Volume::Allocate(Transaction& transaction, Inode* inode, off_t numBlocks,
-	block_run& run, uint16 minimum)
+	block_run& run, uint16 minimum, off_t beginBlock, off_t endBlock)
 {
 	return fBlockAllocator.Allocate(transaction, inode, numBlocks, run,
-		minimum);
+		minimum, beginBlock, endBlock);
 }
 
 
