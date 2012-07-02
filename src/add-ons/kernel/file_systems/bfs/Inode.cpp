@@ -1845,7 +1845,7 @@ Inode::_AllocateBlockArray(Transaction& transaction, block_run& run,
 }
 
 
-/*! Adds \a run to \a data, allocating indirection blocks if necessary.
+/*! Adds \a run to \a dataStream, allocating indirection blocks if necessary.
 	If the block run cannot be added as is, due to constraints on block run
 	size in the double indirect range, \a rest is set to the number of blocks
 	that need to be shaved off the run and the function returns.
@@ -1854,74 +1854,75 @@ Inode::_AllocateBlockArray(Transaction& transaction, block_run& run,
 	size is set to the target file size.
 */
 status_t
-Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
-	off_t targetSize, int32* rest, off_t beginBlock, off_t endBlock)
+Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
+	block_run run, off_t targetSize, int32* rest, off_t beginBlock,
+	off_t endBlock)
 {
 	status_t status;
 
 	if (rest)
 		*rest = 0;
 
-	bool cutSize = targetSize < data->Size()
+	bool cutSize = targetSize < dataStream->Size()
 		+ (run.Length() << fVolume->BlockShift());
 		// if adding this block_run means overshooting the target stream size,
-		// we need to set data->size to targetSize.
+		// we need to set dataStream->size to targetSize.
 
 	// Direct block range
 
-	if (data->Size() <= data->MaxDirectRange()) {
+	if (dataStream->Size() <= dataStream->MaxDirectRange()) {
 		// let's try to put them into the direct block range
 		int32 free = 0;
 		for (; free < NUM_DIRECT_BLOCKS; free++) {
-			if (data->direct[free].IsZero())
+			if (dataStream->direct[free].IsZero())
 				break;
 		}
 
 		if (free < NUM_DIRECT_BLOCKS) {
 			// can we merge the last allocated run with the new one?
 			int32 last = free - 1;
-			if (free > 0 && data->direct[last].MergeableWith(run)) {
-				data->direct[last].length = HOST_ENDIAN_TO_BFS_INT16(
-					data->direct[last].Length() + run.Length());
+			if (free > 0 && dataStream->direct[last].MergeableWith(run)) {
+				dataStream->direct[last].length = HOST_ENDIAN_TO_BFS_INT16(
+					dataStream->direct[last].Length() + run.Length());
 			} else
-				data->direct[free] = run;
+				dataStream->direct[free] = run;
 
-			data->max_direct_range = HOST_ENDIAN_TO_BFS_INT64(
-				data->MaxDirectRange()
+			dataStream->max_direct_range = HOST_ENDIAN_TO_BFS_INT64(
+				dataStream->MaxDirectRange()
 				+ run.Length() * fVolume->BlockSize());
-			data->size = cutSize ? HOST_ENDIAN_TO_BFS_INT64(targetSize)
-				: data->max_direct_range;
+			dataStream->size = cutSize ? HOST_ENDIAN_TO_BFS_INT64(targetSize)
+				: dataStream->max_direct_range;
 			return B_OK;
 		}
 	}
 
 	// Indirect block range
 
-	if (data->Size() <= data->MaxIndirectRange()
-		|| !data->MaxIndirectRange()) {
+	if (dataStream->Size() <= dataStream->MaxIndirectRange()
+		|| !dataStream->MaxIndirectRange()) {
 		CachedBlock cached(fVolume);
 		block_run* runs = NULL;
 		uint32 free = 0;
 		off_t block;
 
 		// if there is no indirect block yet, create one
-		if (data->indirect.IsZero()) {
-			status = _AllocateBlockArray(transaction, data->indirect,
+		if (dataStream->indirect.IsZero()) {
+			status = _AllocateBlockArray(transaction, dataStream->indirect,
 				NUM_ARRAY_BLOCKS, true, beginBlock, endBlock);
 			if (status != B_OK)
 				return status;
 
-			data->max_indirect_range = data->max_direct_range;
+			dataStream->max_indirect_range = dataStream->max_direct_range;
 
 			// insert the block_run in the first block
-			runs = (block_run*)cached.SetTo(data->indirect);
+			runs = (block_run*)cached.SetTo(dataStream->indirect);
 		} else {
 			uint32 numberOfRuns = fVolume->BlockSize() / sizeof(block_run);
-			block = fVolume->ToBlock(data->indirect);
+			block = fVolume->ToBlock(dataStream->indirect);
 
 			// search first empty entry
 			int32 i = 0;
-			for (; i < data->indirect.Length(); i++) {
+			for (; i < dataStream->indirect.Length(); i++) {
 				if ((runs = (block_run*)cached.SetTo(block + i)) == NULL)
 					return B_IO_ERROR;
 
@@ -1932,7 +1933,7 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 				if (free < numberOfRuns)
 					break;
 			}
-			if (i == data->indirect.Length())
+			if (i == dataStream->indirect.Length())
 				runs = NULL;
 		}
 
@@ -1949,26 +1950,26 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 			} else
 				runs[free] = run;
 
-			data->max_indirect_range = HOST_ENDIAN_TO_BFS_INT64(
-				data->MaxIndirectRange()
+			dataStream->max_indirect_range = HOST_ENDIAN_TO_BFS_INT64(
+				dataStream->MaxIndirectRange()
 				+ (run.Length() << fVolume->BlockShift()));
-			data->size = cutSize ? HOST_ENDIAN_TO_BFS_INT64(targetSize)
-				: data->max_indirect_range;
+			dataStream->size = cutSize ? HOST_ENDIAN_TO_BFS_INT64(targetSize)
+				: dataStream->max_indirect_range;
 			return B_OK;
 		}
 	}
 
 	// Double indirect block range
 
-	if (data->Size() <= data->MaxDoubleIndirectRange()
-		|| !data->max_double_indirect_range) {
+	if (dataStream->Size() <= dataStream->MaxDoubleIndirectRange()
+		|| !dataStream->max_double_indirect_range) {
 		// We make sure here that we have this minimum allocated, so if
 		// the allocation succeeds, we don't run into an endless loop.
 		uint16 doubleIndirectBlockLength;
-		if (!data->max_double_indirect_range)
+		if (!dataStream->max_double_indirect_range)
 			doubleIndirectBlockLength = _DoubleIndirectBlockLength();
 		else
-			doubleIndirectBlockLength = data->double_indirect.Length();
+			doubleIndirectBlockLength = dataStream->double_indirect.Length();
 
 		if ((run.Length() % doubleIndirectBlockLength) != 0) {
 			// The number of allocated blocks isn't a multiple of
@@ -1985,14 +1986,15 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 		}
 
 		// if there is no double indirect block yet, create one
-		if (data->double_indirect.IsZero()) {
+		if (dataStream->double_indirect.IsZero()) {
 			status = _AllocateBlockArray(transaction,
-				data->double_indirect, _DoubleIndirectBlockLength(),
+				dataStream->double_indirect, _DoubleIndirectBlockLength(),
 				beginBlock, endBlock);
 			if (status != B_OK)
 				return status;
 
-			data->max_double_indirect_range = data->max_indirect_range;
+			dataStream->max_double_indirect_range =
+				dataStream->max_indirect_range;
 		}
 
 		// calculate the index where to insert the new blocks
@@ -2000,11 +2002,11 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 		int32 runsPerBlock;
 		int32 directSize;
 		int32 indirectSize;
-		get_double_indirect_sizes(data->double_indirect.Length(),
+		get_double_indirect_sizes(dataStream->double_indirect.Length(),
 			fVolume->BlockSize(), runsPerBlock, directSize, indirectSize);
 
-		off_t start = data->MaxDoubleIndirectRange()
-			- data->MaxIndirectRange();
+		off_t start = dataStream->MaxDoubleIndirectRange()
+			- dataStream->MaxIndirectRange();
 		int32 indirectIndex = start / indirectSize;
 		int32 index = (start % indirectSize) / directSize;
 		int32 runsPerArray = runsPerBlock * doubleIndirectBlockLength;
@@ -2025,7 +2027,7 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 					return EFBIG;
 
 				array = (block_run*)cached.SetTo(fVolume->ToBlock(
-					data->double_indirect) + block);
+					dataStream->double_indirect) + block);
 				if (array == NULL)
 					return B_IO_ERROR;
 			}
@@ -2037,7 +2039,8 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 
 					status = _AllocateBlockArray(transaction,
 						array[indirectIndex % runsPerBlock],
-						data->double_indirect.Length(), beginBlock, endBlock);
+						dataStream->double_indirect.Length(), beginBlock,
+						endBlock);
 					if (status != B_OK)
 						return status;
 				}
@@ -2070,11 +2073,11 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* data, block_run run,
 			}
 		}
 
-		data->max_double_indirect_range = HOST_ENDIAN_TO_BFS_INT64(
-			data->MaxDoubleIndirectRange()
+		dataStream->max_double_indirect_range = HOST_ENDIAN_TO_BFS_INT64(
+			dataStream->MaxDoubleIndirectRange()
 			+ (runLength << fVolume->BlockShift()));
-		data->size = cutSize ? HOST_ENDIAN_TO_BFS_INT64(targetSize)
-			: data->max_double_indirect_range;
+		dataStream->size = cutSize ? HOST_ENDIAN_TO_BFS_INT64(targetSize)
+			: dataStream->max_double_indirect_range;
 
 		return B_OK;
 	}
@@ -2648,13 +2651,13 @@ Inode::Sync()
 }
 
 
-/*! Write the block runs in \a buffer to \a data.
+/*! Write the block runs in \a buffer to \a dataStream.
 	If \a flush is set, we always empty the buffer even if it means
 	allocating a block run which is larger than the availible blocks.
 */
 status_t
 Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
-	data_stream* data, off_t targetSize, bool flush, off_t beginBlock,
+	data_stream* dataStream, off_t targetSize, bool flush, off_t beginBlock,
 	off_t endBlock)
 {
 	status_t status;
@@ -2662,8 +2665,8 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 	uint32 blockShift = fVolume->BlockShift();
 
 
-	bool inDoubleIndirect = data->MaxIndirectRange() != 0
-		&& data->Size() > data->MaxIndirectRange();
+	bool inDoubleIndirect = dataStream->MaxIndirectRange() != 0
+		&& dataStream->Size() > dataStream->MaxIndirectRange();
 		// we might be about to add a block_run to the double indirect range 
 		// even if this is false, we'll discover that case when we try
 
@@ -2704,7 +2707,7 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 
 		// add the run to the data stream
 		int32 rest;
-		status = _AddBlockRun(transaction, data, run, targetSize,
+		status = _AddBlockRun(transaction, dataStream, run, targetSize,
 			&rest, beginBlock, endBlock);
 		if (status != B_OK)
 			return status;
@@ -2816,7 +2819,7 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 	// double indirect range of newStream.
 
 	status_t status;
-	data_stream data = {};
+	data_stream newStream = {};
 
 	BlockRunBuffer buffer(fVolume, IsDirectory());
 	status = buffer.AllocateBuffers();
@@ -2842,8 +2845,8 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 			return status;
 
 		if (_IsBlockRunInRange(run, beginBlock, endBlock)) {
-			status = _WriteBufferedRuns(transaction, buffer, &data, Size(),
-				false, beginBlock, endBlock);
+			status = _WriteBufferedRuns(transaction, buffer, &newStream,
+				Size(), false, beginBlock, endBlock);
 			if (status != B_OK)
 				return status;
 
@@ -2852,8 +2855,8 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 			// make sure that this is not the case.
 			if (buffer.IsEmpty()) {
 				int32 rest;
-				status = _AddBlockRun(transaction, &data, run, Size(), &rest,
-					beginBlock, endBlock);
+				status = _AddBlockRun(transaction, &newStream, run, Size(),
+					&rest, beginBlock, endBlock);
 				if (status != B_OK)
 					return status;
 
@@ -2869,8 +2872,8 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 
 		// We can't reuse this block_run, add it to the block_run buffer.
 		if (buffer.IsFull()) {
-			status = _WriteBufferedRuns(transaction, buffer, &data, Size(),
-				false, beginBlock, endBlock);
+			status = _WriteBufferedRuns(transaction, buffer, &newStream,
+				Size(), false, beginBlock, endBlock);
 			if (status != B_OK)
 				return status;
 		}
@@ -2892,12 +2895,12 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 	}
 
 	// write all blocks remaining in the buffer to disk
-	status = _WriteBufferedRuns(transaction, buffer, &data, Size(), true,
+	status = _WriteBufferedRuns(transaction, buffer, &newStream, Size(), true,
 		beginBlock, endBlock);
 	if (status != B_OK)
 		return status;
 	
-	ASSERT(data.Size() == Size());
+	ASSERT(newStream.Size() == Size());
 
 	// free the blocks we didn't end up reusing
 	block_run toFree;
@@ -2907,7 +2910,7 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 			return status;
 	}
 	
-	fNode.data = data;
+	fNode.data = newStream;
 
 	return transaction.Done();
 }

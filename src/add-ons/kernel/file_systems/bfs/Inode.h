@@ -257,15 +257,16 @@ private:
 			status_t			_ShrinkStream(Transaction& transaction,
 									off_t size);
 			status_t			_AddBlockRun(Transaction& transaction,
-									data_stream* data, block_run run,
+									data_stream* dataStream, block_run run,
 									off_t targetSize, int32* rest = NULL,
 									off_t beginBlock = 0, off_t endBlock = 0);
 
 			// moving the data stream
 			status_t			_WriteBufferedRuns(Transaction& transaction,
-									BlockRunBuffer& buffer, data_stream* data,
-									off_t targetSize, bool flush = false,
-									off_t beginBlock = 0, off_t endBlock = 0);
+									BlockRunBuffer& buffer,
+									data_stream* dataStream, off_t targetSize,
+									bool flush = false, off_t beginBlock = 0,
+									off_t endBlock = 0);
 
 			status_t			_GetNextBlockRun(off_t& position,
 									block_run& run) const;
