@@ -153,9 +153,8 @@ public:
 			bool				NeedsTrimming() const;
 
 			status_t			MoveStream(off_t beginBlock, off_t endBlock);
-			status_t			StreamInRange(bool& inRange, off_t beginBlock,
-									off_t endBlock) const;
-
+			status_t			StreamInRange(off_t beginBlock, off_t endBlock,
+									bool& inRange) const;
 
 			status_t			Free(Transaction& transaction);
 			status_t			Sync();
@@ -270,9 +269,9 @@ private:
 
 			status_t			_GetNextBlockRun(off_t& position,
 									block_run& run) const;
-			bool				_BlockRunInRange(block_run run,
+			bool				_IsBlockRunInRange(block_run run,
 									off_t beginBlock, off_t endBlock) const;
-			bool				_BlockRunOutsideRange(block_run run,
+			bool				_IsBlockRunOutsideRange(block_run run,
 									off_t beginBlock, off_t endBlock) const;
 
 private:
