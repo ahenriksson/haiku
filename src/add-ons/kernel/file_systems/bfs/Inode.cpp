@@ -2730,7 +2730,7 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 			off_t blocksRead;
 
 			const uint8* sourceData
-				= buffer.GetBlocks(blocksToWrite, blocksRead);
+				= buffer.GetBlocks(blocksToWrite - blocksWritten, blocksRead);
 			if (sourceData == NULL)
 				return B_IO_ERROR;
 
