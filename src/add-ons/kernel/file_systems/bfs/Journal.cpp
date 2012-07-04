@@ -1073,6 +1073,126 @@ Journal::_TransactionDone(bool success)
 }
 
 
+status_t
+Journal::MoveLog(block_run newLog)
+{
+	block_run oldLog = fVolume->Log();
+	//block_run	log_blocks;
+
+	off_t newEnd = newLog.Start() + newLog.Length();
+	off_t oldEnd = oldLog.Start() + oldLog.Length();
+	//off_t oldLength = fVolume->Log().Length();
+
+	// make sure the new log position is ok
+	if (newLog.AllocationGroup() != 0)
+		return B_BAD_VALUE;
+
+	if (fVolume->ValidateBlockRun(newLog) != B_OK)
+		return B_BAD_VALUE;
+
+	if (newLog.Start() < 1 + fVolume->NumBitmapBlocks())
+		return B_BAD_VALUE;
+
+	if (newEnd > fVolume->NumBlocks())
+		return B_BAD_VALUE;
+
+	status_t status;
+	block_run allocatedRun = {};
+
+	BlockAllocator& allocator = fVolume->Allocator();
+
+	// allocate blocks if necessary
+	if (newEnd > oldEnd) {
+		off_t allocationSize = newEnd - oldEnd;
+
+		Transaction transaction(fVolume, 0);
+
+		status = allocator.AllocateBlocks(transaction, 0, oldEnd,
+			allocationSize, allocationSize, allocatedRun, oldEnd, newEnd);
+		if (status != B_OK)
+			return status;
+
+		// these can't fail if AllocateBlocks works correctly, but perhaps
+		// they ought to be checked in the release build anyways rather than
+		// risking user data? (since we're not actually using the returned run)
+		ASSERT(allocatedRun.AllocationGroup() == 0);
+		ASSERT(allocatedRun.Start() == oldEnd);
+		ASSERT(allocatedRun.Length() == allocationSize);
+
+		status = transaction.Done();
+		if (status != B_OK)
+			return status;
+	}
+
+	// lock journal here?
+
+	status = FlushLogAndBlocks();
+	if (status != B_OK)
+		return status;
+
+	status = recursive_lock_lock(&fLock);
+	if (status != B_OK)
+		return status;
+
+	// lock volume?
+	MutexLocker volumeLock(fVolume->Lock());
+
+	// update references to the log location and size
+	fVolume->SuperBlock().log_blocks = newLog;
+	status = fVolume->WriteSuperBlock();
+	if (status != B_OK) {
+		fVolume->SuperBlock().log_blocks = oldLog;
+		recursive_lock_unlock(&fLock);
+		
+		/*
+		// if we had to allocate some blocks, try to free them
+		// TODO: does it even make sense to try this after we couldn't write
+		//       the superblock?
+		if (!allocatedRun.IsZero()) {
+			Transaction transaction(fVolume, 0);
+			status_t freeStatus = allocator.Free(transaction, allocatedRun);
+			if (freeStatus == B_OK)
+				freeStatus = transaction.Done();
+
+			// don't really care if we fail
+			if (freeStatus != B_OK)
+				REPORT_ERROR(freeStatus);
+		}
+		*/
+
+		return status;
+	}
+	
+	fLogSize = newLog.Length();
+	fMaxTransactionSize = fLogSize / 2 - 5;
+
+	volumeLock.Unlock();
+	recursive_lock_unlock(&fLock);
+
+	// unlock volume, unlock journal
+
+	// at this point, the log is moved and functional in its new location
+
+	// free blocks if necessary
+	if (newEnd < oldEnd) {
+		block_run runToFree = block_run::Run(0, newEnd, oldEnd - newEnd);
+
+		Transaction transaction(fVolume, 0);
+
+		status = allocator.Free(transaction, runToFree);
+		if (status == B_OK)
+			status = transaction.Done();
+
+		// we've already moved the log, no sense in failing just because we
+		// couldn't free a couple of blocks
+		if (status != B_OK)
+			REPORT_ERROR(status);
+	}
+
+	return B_OK;
+}
+
+
 //	#pragma mark - debugger commands
 
 
