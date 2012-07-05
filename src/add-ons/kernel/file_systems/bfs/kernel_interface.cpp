@@ -7,6 +7,7 @@
 //!	file system interface to Haiku's vnode layer
 
 
+#include "CheckVisitor.h"
 #include "Debug.h"
 #include "Volume.h"
 #include "Inode.h"
@@ -771,6 +772,7 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 		}
 		case BFS_IOCTL_START_CHECKING:
 		{
+			/*
 			// start checking
 			BlockAllocator& allocator = volume->Allocator();
 			check_control control;
@@ -784,9 +786,25 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 			}
 
 			return status;
+			*/
+
+			volume->tmpCheckVisitor() = new CheckVisitor(volume);
+			if (user_memcpy(&volume->tmpCheckVisitor()->Control(), buffer,
+					sizeof(check_control)) != B_OK) {
+				return B_BAD_ADDRESS;
+			}
+
+			status_t status = volume->tmpCheckVisitor()->StartBitmapPass();
+			if (status == B_OK) {
+				file_cookie* cookie = (file_cookie*)_cookie;
+				cookie->open_mode |= BFS_OPEN_MODE_CHECKING;
+			}
+
+			return status;
 		}
 		case BFS_IOCTL_STOP_CHECKING:
 		{
+			/*
 			// stop checking
 			BlockAllocator& allocator = volume->Allocator();
 			check_control control;
@@ -800,9 +818,28 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 				status = user_memcpy(buffer, &control, sizeof(check_control));
 
 			return status;
+			*/
+			status_t status = volume->tmpCheckVisitor()->StopChecking();
+
+			if (status == B_OK) {
+				file_cookie* cookie = (file_cookie*)_cookie;
+				cookie->open_mode &= ~BFS_OPEN_MODE_CHECKING;
+
+				status = user_memcpy(buffer,
+					&volume->tmpCheckVisitor()->Control(),
+					sizeof(check_control));
+			}
+
+			delete volume->tmpCheckVisitor();
+			volume->tmpCheckVisitor() = NULL; // aTODO ?
+
+			volume->SetCheckingThread(-1);
+
+			return status;
 		}
 		case BFS_IOCTL_CHECK_NEXT_NODE:
 		{
+			/*
 			// check next
 			BlockAllocator& allocator = volume->Allocator();
 			check_control control;
@@ -810,6 +847,36 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 			status_t status = allocator.CheckNextNode(&control);
 			if (status == B_OK)
 				status = user_memcpy(buffer, &control, sizeof(check_control));
+
+			return status;
+			*/
+
+			volume->SetCheckingThread(find_thread(NULL));
+
+			volume->tmpCheckVisitor()->Control().errors = 0;
+
+			status_t status = volume->tmpCheckVisitor()->Next();
+			if (status == B_ENTRY_NOT_FOUND) {
+				volume->tmpCheckVisitor()->Control().status = B_ENTRY_NOT_FOUND;
+
+				if (volume->tmpCheckVisitor()->Pass()
+					== BFS_CHECK_PASS_BITMAP) {
+					volume->tmpCheckVisitor()->WriteBackCheckBitmap();
+
+					if (status == B_OK
+						&& volume->tmpCheckVisitor()->HasIndicesToRebuild()) {
+						// enter rebuild index pass
+						volume->tmpCheckVisitor()->StartIndexPass();
+						status = volume->tmpCheckVisitor()->Next();
+					}
+				}
+			}
+			
+			if (status == B_OK) {
+				status = user_memcpy(buffer,
+					&volume->tmpCheckVisitor()->Control(),
+					sizeof(check_control));
+			}
 
 			return status;
 		}
@@ -1612,7 +1679,9 @@ bfs_free_cookie(fs_volume* _volume, fs_vnode* _node, void* _cookie)
 	if ((cookie->open_mode & BFS_OPEN_MODE_CHECKING) != 0) {
 		// "chkbfs" exited abnormally, so we have to stop it here...
 		FATAL(("check process was aborted!\n"));
-		volume->Allocator().StopChecking(NULL);
+		//volume->Allocator().StopChecking(NULL); aTODO don't forget this place
+		volume->tmpCheckVisitor()->StopChecking();
+		delete volume->tmpCheckVisitor();
 	}
 
 	if ((cookie->open_mode & O_NOCACHE) != 0 && inode->FileCache() != NULL)
