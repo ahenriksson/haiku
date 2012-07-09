@@ -41,6 +41,8 @@ public:
 
 	inline	uint32			FreeLogBlocks() const;
 
+			status_t		MoveLog(block_run newLog);
+
 #ifdef BFS_DEBUGGER_COMMANDS
 			void			Dump();
 #endif
