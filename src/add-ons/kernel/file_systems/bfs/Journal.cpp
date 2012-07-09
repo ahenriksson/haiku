@@ -1077,7 +1077,9 @@ status_t
 Journal::MoveLog(block_run newLog)
 {
 	block_run oldLog = fVolume->Log();
-	//block_run	log_blocks;
+
+	if (newLog == oldLog)
+		return B_OK;
 
 	off_t newEnd = newLog.Start() + newLog.Length();
 	off_t oldEnd = oldLog.Start() + oldLog.Length();

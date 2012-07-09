@@ -41,6 +41,7 @@ KernelAddon bfs :
 	Inode.cpp
 	Journal.cpp
 	Query.cpp
+	ResizeVisitor.cpp
 	Volume.cpp
 
 	kernel_interface.cpp
