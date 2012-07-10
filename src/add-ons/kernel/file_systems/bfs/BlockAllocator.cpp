@@ -611,6 +611,22 @@ BlockAllocator::InitializeAndClearBitmap(Transaction& transaction)
 
 
 status_t
+BlockAllocator::Reinitialize()
+{
+	RecursiveLocker locker(fLock);
+
+	// need to write back any pending changes to the block bitmap
+	// TODO: shall we read through the cache in _Initialize instead?
+	status_t status = fVolume->GetJournal(0)->FlushLogAndBlocks();
+	if (status != B_OK)
+		return status;
+
+	delete[] fGroups;
+	return Initialize();
+}
+
+
+status_t
 BlockAllocator::_Initialize(BlockAllocator* allocator)
 {
 	// The lock must already be held at this point
