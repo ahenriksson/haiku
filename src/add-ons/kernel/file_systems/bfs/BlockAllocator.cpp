@@ -1701,7 +1701,7 @@ BlockAllocator::CheckBlocks(off_t start, off_t length, bool allocated)
 
 	uint32 group = start >> fVolume->AllocationGroupShift();
 	uint32 groupBlock = start / (fVolume->BlockSize() << 3);
-	uint32 blockOffset = start % fVolume->BlockSize();
+	uint32 blockOffset = start % (fVolume->BlockSize() << 3);
 
 	AllocationBlock cached(fVolume);
 
