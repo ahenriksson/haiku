@@ -603,6 +603,8 @@ CheckVisitor::_CheckAllocated(block_run run, const char* type)
 			"not allocated!\n", type, run.AllocationGroup(), run.Start(),
 			run.Length(), firstMissing, afterLastMissing - 1));
 
+		Control().stats.missing += afterLastMissing - firstMissing;
+
 		block = afterLastMissing;
 	}
 
