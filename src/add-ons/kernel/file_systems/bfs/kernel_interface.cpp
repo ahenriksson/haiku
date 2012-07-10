@@ -14,6 +14,7 @@
 #include "Index.h"
 #include "BPlusTree.h"
 #include "Query.h"
+#include "ResizeVisitor.h"
 #include "Attribute.h"
 #include "bfs_control.h"
 #include "bfs_disk_system.h"
@@ -715,6 +716,34 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 				return B_BAD_ADDRESS;
 
 			return volume->WriteSuperBlock();
+		}
+		case 56744:
+		{
+			// start
+			INFORM(("Resize start\n"));
+			ResizeVisitor*& resizer = volume->GetResizeVisitor();
+			resizer = new ResizeVisitor(volume);
+
+			return resizer->StartResize(7000*2048);
+		}
+		case 56745:
+		{
+			// finish
+			INFORM(("Resize finish\n"));
+			ResizeVisitor*& resizer = volume->GetResizeVisitor();
+
+			status_t status = resizer->FinishResize();
+			delete resizer;
+
+			return status;
+		}
+		case 56746:
+		{
+			// move next
+			INFORM(("Resize next\n"));
+			ResizeVisitor*& resizer = volume->GetResizeVisitor();
+
+			return resizer->Next();
 		}
 		case 56743:
 		{

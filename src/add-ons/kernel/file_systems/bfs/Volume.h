@@ -16,6 +16,7 @@ class CheckVisitor;
 class Journal;
 class Inode;
 class Query;
+class ResizeVisitor;
 
 
 enum volume_flags {
@@ -121,6 +122,10 @@ public:
 								{ return find_thread(NULL) == fCheckingThread; }
 			CheckVisitor*&	GetCheckVisitor() { return fCheckVisitor; }
 
+			// resizing
+			// TODO / aTODO: do we need SetResizingThread?
+			ResizeVisitor*&	GetResizeVisitor() { return fResizeVisitor; }
+
 			// cache access
 			status_t		WriteSuperBlock();
 			status_t		FlushDevice();
@@ -176,6 +181,8 @@ protected:
 			void*			fBlockCache;
 			thread_id		fCheckingThread;
 			CheckVisitor*	fCheckVisitor;
+
+			ResizeVisitor*	fResizeVisitor;
 
 			InodeList		fRemovedInodes;
 };
