@@ -2,6 +2,9 @@
 #define CHECK_VISITOR_H
 
 
+#include "system_dependencies.h"
+
+
 #include "bfs_control.h"
 #include "FileSystemVisitor.h"
 

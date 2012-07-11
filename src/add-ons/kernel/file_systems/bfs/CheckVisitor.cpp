@@ -251,6 +251,9 @@ CheckVisitor::VisitDirectoryEntry(Inode* inode, Inode* parent,
 status_t
 CheckVisitor::VisitInode(Inode* inode, const char* treeName)
 {
+	Control().mode = inode->Mode();
+		// (we might have set the mode in VisitDirectoryEntry already)
+
 	// set name
 	if (treeName == NULL) {
 		if (inode->GetName(Control().name) < B_OK) {
@@ -292,15 +295,16 @@ CheckVisitor::VisitInode(Inode* inode, const char* treeName)
 					}
 				}
 			}
+
+			break;
 		}
 
 		case BFS_CHECK_PASS_INDEX:
 			status = _AddInodeToIndex(inode);
+			break;
 	}
 
 	Control().status = status;
-
-
 	return B_OK;
 }
 
