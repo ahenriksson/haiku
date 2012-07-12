@@ -57,7 +57,7 @@ ResizeVisitor::StartResize(off_t newSize)
 			//> GetVolume()->Log().Start() + GetVolume()->Log().Length()) {
 
 	Start(VISIT_REGULAR | VISIT_INDICES | VISIT_REMOVED
-		/*| VISIT_ATTRIBUTE_DIRECTORIES can't move these yet*/);
+		| VISIT_ATTRIBUTE_DIRECTORIES);
 
 	/*
 	if (newNumBlocks < GetVolume()->NumBlocks()) {
@@ -274,6 +274,60 @@ ResizeVisitor::_ResizeVolume()
 
 
 status_t
+ResizeVisitor::_UpdateParent(Transaction& transaction, Inode* inode,
+	off_t newInodeID)
+{
+	// are we the root node or index directory?
+	if (inode->BlockRun() == inode->Parent())
+		return B_OK;
+
+	// get name of this inode
+	char name[B_FILE_NAME_LENGTH];
+	status_t status = inode->GetName(name, B_FILE_NAME_LENGTH);
+	if (status != B_OK)
+		return status;
+
+	// get Inode of parent
+	off_t parentBlock = GetVolume()->ToBlock(inode->Parent());
+
+	Vnode parentVnode(GetVolume(), parentBlock);
+	Inode* parent;
+	status = parentVnode.Get(&parent);
+	if (status != B_OK)
+		return status;
+
+	// update inode id in parent
+	if (inode->IsAttributeDirectory()) {
+		parent->Attributes() = GetVolume()->ToBlockRun(newInodeID);
+		return parent->WriteBack(transaction);
+	} else {
+		BPlusTree* tree = parent->Tree();
+		return tree->Replace(transaction, (const uint8*)name,
+			(uint16)strlen(name), newInodeID);
+	}
+}
+
+
+status_t
+ResizeVisitor::_UpdateAttributeDirectory(Transaction& transaction, Inode* inode,
+	block_run newInodeRun)
+{
+	if (inode->Attributes().IsZero())
+		return B_OK;
+
+	Vnode vnode(GetVolume(), inode->Attributes());
+	Inode* attributeDirectory;
+
+	status_t status = vnode.Get(&attributeDirectory);
+	if (status != B_OK)
+		return status;
+
+	attributeDirectory->Parent() = newInodeRun;
+	return attributeDirectory->WriteBack(transaction);
+}
+
+
+status_t
 ResizeVisitor::_UpdateIndexReferences(Transaction& transaction, Inode* inode,
 	off_t newInodeID)
 {
@@ -351,32 +405,6 @@ ResizeVisitor::_UpdateIndexReferences(Transaction& transaction, Inode* inode,
 
 
 status_t
-ResizeVisitor::_UpdateParent(Transaction& transaction, Inode* inode,
-	off_t newInodeID)
-{
-	// get name of this inode
-	char name[B_FILE_NAME_LENGTH];
-	status_t status = inode->GetName(name, B_FILE_NAME_LENGTH);
-	if (status != B_OK)
-		return status;
-
-	// get Inode of parent
-	off_t parentBlock = GetVolume()->ToBlock(inode->Parent());
-
-	Vnode parentVnode(GetVolume(), parentBlock);
-	Inode* parent;
-	status = parentVnode.Get(&parent);
-	if (status != B_OK)
-		return status;
-
-	// update inode id in parent
-	BPlusTree* tree = parent->Tree();
-	return tree->Replace(transaction, (const uint8*)name, (uint16)strlen(name),
-		newInodeID);
-}
-
-
-status_t
 ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID)
 {
 	Transaction transaction(GetVolume(), 0);
@@ -400,7 +428,11 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID)
 	if (status != B_OK)
 		return status;
 
-	status = _UpdateParent(transaction, inode, newInodeID);
+	status = _UpdateAttributeDirectory(transaction, inode, run);
+	if (status != B_OK)
+		return status;
+
+	status = _UpdateIndexReferences(transaction, inode, newInodeID);
 	if (status != B_OK)
 		return status;
 

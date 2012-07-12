@@ -33,9 +33,12 @@ public:
 private:
 			status_t			_ResizeVolume();
 
-			status_t			_UpdateIndexReferences(Transaction& transaction,
-									Inode* inode, off_t newInodeID);
 			status_t			_UpdateParent(Transaction& transaction,
+									Inode* inode, off_t newInodeID);
+			status_t			_UpdateAttributeDirectory(
+									Transaction& transaction, Inode* inode,
+									block_run newInodeRun);
+			status_t			_UpdateIndexReferences(Transaction& transaction,
 									Inode* inode, off_t newInodeID);
 			status_t			_MoveInode(Inode* inode, off_t& newInodeID);
 
