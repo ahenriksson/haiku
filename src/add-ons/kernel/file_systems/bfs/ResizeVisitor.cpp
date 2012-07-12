@@ -23,6 +23,12 @@ ResizeVisitor::StartResize(off_t newSize)
 	if (diskSize < (newNumBlocks << blockShift))
 		return B_BAD_VALUE;
 
+	// make sure no unsynced transaction causes invalidated blocks to linger
+	// in the block cache when we write data with write_pos
+	status = GetVolume()->GetJournal(0)->FlushLogAndBlocks();
+	if (status != B_OK)
+		return status;
+
 	off_t newLogSize = 2048;
 	if (newNumBlocks <= 20480)
 		newLogSize = 512;
@@ -226,7 +232,7 @@ ResizeVisitor::_ResizeVolume()
 	int64 oldNumBlocks = superBlock.num_blocks;
 	int32 oldNumAgs = superBlock.num_ags;
 
-	superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(fEndBlock - fBeginBlock);
+	superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(fEndBlock);
 	superBlock.num_ags = HOST_ENDIAN_TO_BFS_INT32(
 			(fBitmapBlocks + blocksPerGroup - 1) >> groupShift);
 
