@@ -3868,6 +3868,44 @@ get_vnode_removed(fs_volume* volume, ino_t vnodeID, bool* _removed)
 }
 
 
+extern "C" status_t
+mark_vnode_busy(fs_volume* volume, ino_t vnodeID, bool busy)
+{
+	ReadLocker locker(sVnodeLock);
+
+	struct vnode* vnode = lookup_vnode(volume->id, vnodeID);
+	if (vnode == NULL)
+		return B_ENTRY_NOT_FOUND;
+
+	// are we trying to mark an already busy node busy again?
+	if (busy && vnode->IsBusy())
+		return B_BUSY;
+
+	vnode->Lock();
+	vnode->SetBusy(busy);
+	vnode->Unlock();
+
+	return B_OK;
+}
+
+
+extern "C" status_t
+change_vnode_id(fs_volume* volume, ino_t vnodeID, ino_t newID)
+{
+	WriteLocker locker(sVnodeLock);
+	
+	struct vnode* vnode = lookup_vnode(volume->id, vnodeID);
+	if (vnode == NULL)
+		return B_ENTRY_NOT_FOUND;
+
+	hash_remove(sVnodeTable, vnode);
+	vnode->id = newID;
+	hash_insert(sVnodeTable, vnode);
+
+	return B_OK;
+}
+
+
 extern "C" fs_volume*
 volume_for_vnode(fs_vnode* _vnode)
 {
