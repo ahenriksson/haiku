@@ -110,15 +110,36 @@ ResizeVisitor::FinishResize()
 status_t
 ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 {
+	WriteLocker writeLocker(inode->Lock());
+
 	status_t status;
 	off_t inodeBlock = inode->BlockNumber();
 
 	// start by moving the inode so we can place the stream close to it
 	// if possible
 	if (inodeBlock < fBeginBlock || inodeBlock >= fEndBlock) {
-		status = _MoveInode(inode);
-		if (status != B_OK)
+		status = mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), true);
+
+		ino_t oldInodeID = inode->ID();
+		off_t newInodeID;
+
+		status = _MoveInode(inode, newInodeID);
+		if (status != B_OK) {
+			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
 			return status;
+		}
+
+		status = change_vnode_id(GetVolume()->FSVolume(), oldInodeID,
+			newInodeID);
+		if (status != B_OK) {
+			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
+			return status;
+		}
+
+		inode->SetID(newInodeID);
+
+		// accessing the inode with the new ID
+		mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
 	}
 
 	// move the stream if necessary
@@ -356,7 +377,7 @@ ResizeVisitor::_UpdateParent(Transaction& transaction, Inode* inode,
 
 
 status_t
-ResizeVisitor::_MoveInode(Inode* inode)
+ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID)
 {
 	Transaction transaction(GetVolume(), 0);
 
@@ -369,7 +390,7 @@ ResizeVisitor::_MoveInode(Inode* inode)
 	if (status != B_OK)
 		return status;
 
-	off_t newInodeID = GetVolume()->ToBlock(run);
+	newInodeID = GetVolume()->ToBlock(run);
 
 	status = inode->Copy(transaction, newInodeID);
 	if (status != B_OK)

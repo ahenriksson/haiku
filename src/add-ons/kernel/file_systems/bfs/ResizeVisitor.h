@@ -37,7 +37,7 @@ private:
 									Inode* inode, off_t newInodeID);
 			status_t			_UpdateParent(Transaction& transaction,
 									Inode* inode, off_t newInodeID);
-			status_t			_MoveInode(Inode* inode);
+			status_t			_MoveInode(Inode* inode, off_t& newInodeID);
 
 			status_t			_TemporaryGetDiskSize(off_t& size);
 
