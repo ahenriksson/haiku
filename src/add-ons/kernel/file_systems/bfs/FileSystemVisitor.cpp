@@ -48,6 +48,7 @@ FileSystemVisitor::Next()
 	while (true) {
 		const char* name = NULL;
 		Inode* inode;
+		Vnode vnode;
 
 		if (fIterator == NULL) {
 			if (!fStack.Pop(&fCurrent)) {
@@ -56,7 +57,7 @@ FileSystemVisitor::Next()
 			}
 
 			// open inode
-			Vnode vnode(fVolume, fCurrent);
+			vnode.SetTo(fVolume, fCurrent);
 			status = vnode.Get(&inode);
 			if (status != B_OK) {
 				status = OpenInodeFailed(status, fVolume->ToBlock(fCurrent),
@@ -121,7 +122,7 @@ FileSystemVisitor::Next()
 			if (!strcmp(treeName, ".") || !strcmp(treeName, ".."))
 				continue;
 
-			Vnode vnode(fVolume, id);
+			vnode.SetTo(fVolume, id);
 			status = vnode.Get(&inode);
 			if (status != B_OK) {
 				status = OpenInodeFailed(status, id, fParent, treeName,
