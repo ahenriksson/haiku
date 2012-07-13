@@ -1,3 +1,12 @@
+/*
+ * Copyright 2012, Andreas Henriksson, sausageboy@gmail.com
+ * This file may be used under the terms of the MIT License.
+ */
+
+
+//! File system resizing
+
+
 #include "ResizeVisitor.h"
 
 #include "BPlusTree.h"

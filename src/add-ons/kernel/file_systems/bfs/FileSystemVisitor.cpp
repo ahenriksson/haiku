@@ -1,3 +1,13 @@
+/*
+ * Copyright 2002-2012, Axel Dörfler, axeld@pinc-software.de.
+ * Copyright 2012, Andreas Henriksson, sausageboy@gmail.com
+ * This file may be used under the terms of the MIT License.
+ */
+
+
+//! Traversing the file system
+
+
 #include "FileSystemVisitor.h"
 
 #include "BPlusTree.h"

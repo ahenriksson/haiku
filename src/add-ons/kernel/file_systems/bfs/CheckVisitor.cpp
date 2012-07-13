@@ -1,3 +1,13 @@
+/*
+ * Copyright 2002-2012, Axel Dörfler, axeld@pinc-software.de.
+ * Copyright 2012, Andreas Henriksson, sausageboy@gmail.com
+ * This file may be used under the terms of the MIT License.
+ */
+
+
+//! File system error checking
+
+
 #include "CheckVisitor.h"
 
 #include "BlockAllocator.h"

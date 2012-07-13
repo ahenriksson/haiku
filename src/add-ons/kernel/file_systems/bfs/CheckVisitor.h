@@ -1,3 +1,8 @@
+/*
+ * Copyright 2002-2012, Axel Dörfler, axeld@pinc-software.de.
+ * Copyright 2012, Andreas Henriksson, sausageboy@gmail.com
+ * This file may be used under the terms of the MIT License.
+ */
 #ifndef CHECK_VISITOR_H
 #define CHECK_VISITOR_H
 
