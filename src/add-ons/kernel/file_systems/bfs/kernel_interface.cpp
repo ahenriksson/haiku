@@ -769,15 +769,6 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 			return user_memcpy(buffer, &resizer->Control(),
 				sizeof(resize_control));
 		}
-		case 56743:
-		{
-			// move inode
-			//Vnode vnode(volume, 692);
-			//Inode *inode;
-			//vnode.Get(&inode);
-			//bfs_resize_move_inode(volume, inode);
-			return B_OK;
-		}
 
 #ifdef DEBUG_FRAGMENTER
 		case 56741:
