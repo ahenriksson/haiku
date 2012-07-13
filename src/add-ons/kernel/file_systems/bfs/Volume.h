@@ -151,6 +151,7 @@ public:
 	static	status_t		CheckSuperBlock(const uint8* data,
 								uint32* _offset = NULL);
 	static	status_t		Identify(int fd, disk_super_block* superBlock);
+	static	off_t			CalculateLogSize(off_t numBlocks, off_t deviceSize);
 
 protected:
 			fs_volume*		fVolume;
