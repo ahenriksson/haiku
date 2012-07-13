@@ -900,17 +900,19 @@ Journal::_WriteTransactionToLog()
 
 
 /*!	Flushes the current log entry to disk. If \a flushBlocks is \c true it will
-	also write back all dirty blocks for this volume.
+	also write back all dirty blocks for this volume. If \a movingLog is \c
+	true, we allow the lock to be held when the function is called.
 */
 status_t
-Journal::_FlushLog(bool canWait, bool flushBlocks)
+Journal::_FlushLog(bool canWait, bool flushBlocks, bool movingLog)
 {
 	status_t status = canWait ? recursive_lock_lock(&fLock)
 		: recursive_lock_trylock(&fLock);
 	if (status != B_OK)
 		return status;
 
-	if (recursive_lock_get_recursion(&fLock) > 1) {
+	int32 allowedLocks = movingLog ? 2 : 1;
+	if (recursive_lock_get_recursion(&fLock) > allowedLocks) {
 		// whoa, FlushLogAndBlocks() was called from inside a transaction
 		recursive_lock_unlock(&fLock);
 		return B_OK;
@@ -1083,7 +1085,6 @@ Journal::MoveLog(block_run newLog)
 
 	off_t newEnd = newLog.Start() + newLog.Length();
 	off_t oldEnd = oldLog.Start() + oldLog.Length();
-	//off_t oldLength = fVolume->Log().Length();
 
 	// make sure the new log position is ok
 	if (newLog.AllocationGroup() != 0)
@@ -1114,9 +1115,6 @@ Journal::MoveLog(block_run newLog)
 		if (status != B_OK)
 			return status;
 
-		// these can't fail if AllocateBlocks works correctly, but perhaps
-		// they ought to be checked in the release build anyways rather than
-		// risking user data? (since we're not actually using the returned run)
 		ASSERT(allocatedRun.AllocationGroup() == 0);
 		ASSERT(allocatedRun.Start() == oldEnd);
 		ASSERT(allocatedRun.Length() == allocationSize);
@@ -1126,17 +1124,12 @@ Journal::MoveLog(block_run newLog)
 			return status;
 	}
 
-	// lock journal here?
+	RecursiveLocker locker(fLock);
 
-	status = FlushLogAndBlocks();
+	status = _FlushLog(true, true, true);
 	if (status != B_OK)
 		return status;
 
-	status = recursive_lock_lock(&fLock);
-	if (status != B_OK)
-		return status;
-
-	// lock volume?
 	MutexLocker volumeLock(fVolume->Lock());
 
 	// update references to the log location and size
@@ -1144,12 +1137,8 @@ Journal::MoveLog(block_run newLog)
 	status = fVolume->WriteSuperBlock();
 	if (status != B_OK) {
 		fVolume->SuperBlock().log_blocks = oldLog;
-		recursive_lock_unlock(&fLock);
 		
-		/*
 		// if we had to allocate some blocks, try to free them
-		// TODO: does it even make sense to try this after we couldn't write
-		//       the superblock?
 		if (!allocatedRun.IsZero()) {
 			Transaction transaction(fVolume, 0);
 			status_t freeStatus = allocator.Free(transaction, allocatedRun);
@@ -1160,7 +1149,6 @@ Journal::MoveLog(block_run newLog)
 			if (freeStatus != B_OK)
 				REPORT_ERROR(freeStatus);
 		}
-		*/
 
 		return status;
 	}
@@ -1169,9 +1157,7 @@ Journal::MoveLog(block_run newLog)
 	fMaxTransactionSize = fLogSize / 2 - 5;
 
 	volumeLock.Unlock();
-	recursive_lock_unlock(&fLock);
-
-	// unlock volume, unlock journal
+	locker.Unlock();
 
 	// at this point, the log is moved and functional in its new location
 
