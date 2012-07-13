@@ -740,8 +740,15 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 
 			resizer->StartResize();
 
-			return user_memcpy(buffer, &resizer->Control(),
+			status = user_memcpy(buffer, &resizer->Control(),
 				sizeof(resize_control));
+
+			if (resizer->Control().status != B_OK
+				|| (resizer->Control().flags & BFS_CHECK_RESIZE)) {
+				volume->DeleteResizeVisitor();
+			}
+
+			return status;
 		}
 		case BFS_IOCTL_FINISH_RESIZE:
 		{
@@ -754,7 +761,7 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 			status_t status = user_memcpy(buffer, &resizer->Control(),
 				sizeof(resize_control));
 
-			delete resizer;
+			volume->DeleteResizeVisitor();
 			return status;
 		}
 		case BFS_IOCTL_MOVE_NEXT_NODE:
@@ -763,8 +770,11 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 			if (resizer == NULL)
 				return B_NO_INIT;
 
-			resizer->Next();
-				// the return value has been saved away in the resize_control
+			if (resizer->Next() == B_ENTRY_NOT_FOUND) {
+				// other return values will be saved away in the
+				// resize_control
+				return B_ENTRY_NOT_FOUND;
+			}
 
 			return user_memcpy(buffer, &resizer->Control(),
 				sizeof(resize_control));

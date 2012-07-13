@@ -57,14 +57,14 @@ private:
 			resize_control		fControl;
 			bool				fShrinking;
 
+			off_t				fNumBlocks;
+
 			off_t				fBeginBlock;
 			off_t				fEndBlock;
 
 			off_t				fBitmapBlocks;
 
 			block_run			fNewLog;
-
-			//bool				fForce;
 };
 
 

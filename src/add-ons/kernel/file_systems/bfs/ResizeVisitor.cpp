@@ -38,16 +38,16 @@ ResizeVisitor::StartResize()
 	Control().stats.block_size = GetVolume()->BlockSize();
 
 	// calculate new values for the log and number of bitmap blocks
-	off_t numBlocks = (Control().new_size + blockSize - 1) >> blockShift;
+	fNumBlocks = (Control().new_size + blockSize - 1) >> blockShift;
 		// round up to a whole block
 
 	uint16 logLength = 2048;
-	if (numBlocks <= 20480)
+	if (fNumBlocks <= 20480)
 		logLength = 512;
 	if (Control().new_size > 1LL * 1024 * 1024 * 1024)
 		logLength = 4096;
 
-	fBitmapBlocks = (numBlocks + blockSize * 8 - 1) / (blockSize * 8);
+	fBitmapBlocks = (fNumBlocks + blockSize * 8 - 1) / (blockSize * 8);
 	fNewLog.SetTo(0, 1 + fBitmapBlocks, logLength);
 
 	off_t reservedLength = 1 + fBitmapBlocks + logLength;
@@ -74,12 +74,12 @@ ResizeVisitor::StartResize()
 		return;
 	}
 
-	if (diskSize < (numBlocks << blockShift)) {
+	if (diskSize < (fNumBlocks << blockShift)) {
 		_SetError(B_BAD_VALUE, BFS_DISK_TOO_SMALL);
 		return;
 	}
 
-	if (GetVolume()->UsedBlocks() > numBlocks) {
+	if (GetVolume()->UsedBlocks() > fNumBlocks) {
 		_SetError(B_BAD_VALUE, BFS_NO_SPACE);
 		return;
 	}
@@ -98,9 +98,9 @@ ResizeVisitor::StartResize()
 
 	fBeginBlock = reservedLength;
 
-	if (numBlocks < GetVolume()->NumBlocks()) {
+	if (fNumBlocks < GetVolume()->NumBlocks()) {
 		fShrinking = true;
-		fEndBlock = numBlocks;
+		fEndBlock = fNumBlocks;
 	} else {
 		fShrinking = false;
 		fEndBlock = GetVolume()->NumBlocks();
@@ -259,9 +259,9 @@ ResizeVisitor::_ResizeVolume()
 	BlockAllocator& allocator = GetVolume()->Allocator();
 
 	// check that the end blocks are free
-	if (fEndBlock < GetVolume()->NumBlocks()) {
-		status = allocator.CheckBlocks(fEndBlock,
-			GetVolume()->NumBlocks() - fEndBlock, false);
+	if (fNumBlocks < GetVolume()->NumBlocks()) {
+		status = allocator.CheckBlocks(fNumBlocks,
+			GetVolume()->NumBlocks() - fNumBlocks, false);
 		if (status != B_OK)
 			return status;
 	}
@@ -299,9 +299,9 @@ ResizeVisitor::_ResizeVolume()
 	int64 oldNumBlocks = superBlock.num_blocks;
 	int32 oldNumAgs = superBlock.num_ags;
 
-	superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(fEndBlock);
+	superBlock.num_blocks = HOST_ENDIAN_TO_BFS_INT64(fNumBlocks);
 	superBlock.num_ags = HOST_ENDIAN_TO_BFS_INT32(
-			(fBitmapBlocks + blocksPerGroup - 1) >> groupShift);
+			(fNumBlocks + blocksPerGroup - 1) >> groupShift);
 
 	status = GetVolume()->WriteSuperBlock();
 	if (status != B_OK) {
