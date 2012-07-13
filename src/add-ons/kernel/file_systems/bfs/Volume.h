@@ -125,8 +125,9 @@ public:
 			::CheckVisitor*	CheckVisitor() { return fCheckVisitor; }
 
 			// resizing
-			// TODO / aTODO: do we need SetResizingThread?
-			ResizeVisitor*&	GetResizeVisitor() { return fResizeVisitor; }
+			status_t		CreateResizeVisitor();
+			void			DeleteResizeVisitor();
+			::ResizeVisitor* ResizeVisitor() { return fResizeVisitor; }
 
 			// cache access
 			status_t		WriteSuperBlock();
@@ -185,7 +186,7 @@ protected:
 			thread_id		fCheckingThread;
 			::CheckVisitor*	fCheckVisitor;
 
-			ResizeVisitor*	fResizeVisitor;
+			::ResizeVisitor* fResizeVisitor;
 
 			InodeList		fRemovedInodes;
 };

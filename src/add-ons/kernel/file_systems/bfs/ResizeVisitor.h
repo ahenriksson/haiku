@@ -1,9 +1,14 @@
+/*
+ * Copyright 2012, Andreas Henriksson, sausageboy@gmail.com
+ * This file may be used under the terms of the MIT License.
+ */
 #ifndef RESIZE_VISITOR_H
 #define RESIZE_VISITOR_H
 
 
 #include "system_dependencies.h"
 
+#include "bfs_control.h"
 #include "FileSystemVisitor.h"
 
 
@@ -13,13 +18,12 @@ class Transaction;
 
 class ResizeVisitor : public FileSystemVisitor {
 public:
-								ResizeVisitor(Volume* volume) // aTODO tmp
-									:
-									FileSystemVisitor(volume),
-									fForce(false) {}
+								ResizeVisitor(Volume* volume);
 
-	status_t					StartResize(off_t newSize);
-	status_t					FinishResize();
+	void						StartResize();
+	void						FinishResize();
+
+	resize_control&				Control() { return fControl; }
 
 	virtual status_t			VisitInode(Inode* inode, const char* treeName);
 
@@ -42,9 +46,15 @@ private:
 									Inode* inode, off_t newInodeID);
 			status_t			_MoveInode(Inode* inode, off_t& newInodeID);
 
+			bool				_ControlValid();
+
+			void				_SetError(status_t status,
+									uint32 failurePoint = BFS_OTHER_ERROR);
+
 			status_t			_TemporaryGetDiskSize(off_t& size);
 
 private:
+			resize_control		fControl;
 			bool				fShrinking;
 
 			off_t				fBeginBlock;
@@ -54,7 +64,7 @@ private:
 
 			block_run			fNewLog;
 
-			bool				fForce;
+			//bool				fForce;
 };
 
 

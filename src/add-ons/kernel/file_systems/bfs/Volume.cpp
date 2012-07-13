@@ -13,6 +13,7 @@
 #include "Inode.h"
 #include "Journal.h"
 #include "Query.h"
+#include "ResizeVisitor.h"
 #include "Volume.h"
 
 
@@ -284,7 +285,8 @@ Volume::Volume(fs_volume* volume)
 	fDirtyCachedBlocks(0),
 	fFlags(0),
 	fCheckingThread(-1),
-	fCheckVisitor(NULL)
+	fCheckVisitor(NULL),
+	fResizeVisitor(NULL)
 {
 	mutex_init(&fLock, "bfs volume");
 	mutex_init(&fQueryLock, "bfs queries");
@@ -640,6 +642,28 @@ Volume::DeleteCheckVisitor()
 {
 	delete fCheckVisitor;
 	fCheckVisitor = NULL;
+}
+
+
+status_t
+Volume::CreateResizeVisitor()
+{
+	if (fResizeVisitor != NULL)
+		return B_BUSY;
+
+	fResizeVisitor = new(std::nothrow) ::ResizeVisitor(this);
+	if (fResizeVisitor == NULL)
+		return B_NO_MEMORY;
+
+	return B_OK;
+}
+
+
+void
+Volume::DeleteResizeVisitor()
+{
+	delete fResizeVisitor;
+	fResizeVisitor = NULL;
 }
 
 

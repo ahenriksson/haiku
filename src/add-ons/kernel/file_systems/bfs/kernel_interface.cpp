@@ -725,33 +725,49 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 
 			return volume->WriteSuperBlock();
 		}
-		case 56744:
+		case BFS_IOCTL_START_RESIZE:
 		{
-			// start
-			INFORM(("Resize start\n"));
-			ResizeVisitor*& resizer = volume->GetResizeVisitor();
-			resizer = new ResizeVisitor(volume);
+			status_t status = volume->CreateResizeVisitor();
+			if (status != B_OK)
+				return status;
 
-			return resizer->StartResize(7000*2048);
+			ResizeVisitor* resizer = volume->ResizeVisitor();
+
+			if (user_memcpy(&resizer->Control(), buffer,
+					sizeof(resize_control)) != B_OK) {
+				return B_BAD_ADDRESS;
+			}
+
+			resizer->StartResize();
+
+			return user_memcpy(buffer, &resizer->Control(),
+				sizeof(resize_control));
 		}
-		case 56745:
+		case BFS_IOCTL_FINISH_RESIZE:
 		{
-			// finish
-			INFORM(("Resize finish\n"));
-			ResizeVisitor*& resizer = volume->GetResizeVisitor();
+			ResizeVisitor* resizer = volume->ResizeVisitor();
+			if (resizer == NULL)
+				return B_NO_INIT;
 
-			status_t status = resizer->FinishResize();
+			resizer->FinishResize();
+
+			status_t status = user_memcpy(buffer, &resizer->Control(),
+				sizeof(resize_control));
+
 			delete resizer;
-
 			return status;
 		}
-		case 56746:
+		case BFS_IOCTL_MOVE_NEXT_NODE:
 		{
-			// move next
-			INFORM(("Resize next\n"));
-			ResizeVisitor*& resizer = volume->GetResizeVisitor();
+			ResizeVisitor* resizer = volume->ResizeVisitor();
+			if (resizer == NULL)
+				return B_NO_INIT;
 
-			return resizer->Next();
+			resizer->Next();
+				// the return value has been saved away in the resize_control
+
+			return user_memcpy(buffer, &resizer->Control(),
+				sizeof(resize_control));
 		}
 		case 56743:
 		{

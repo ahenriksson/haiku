@@ -15,110 +15,153 @@
 #include "Journal.h"
 
 
-status_t
-ResizeVisitor::StartResize(off_t newSize)
+ResizeVisitor::ResizeVisitor(Volume* volume)
+	:
+	FileSystemVisitor(volume)
 {
+}
+
+
+void
+ResizeVisitor::StartResize()
+{
+	_SetError(B_OK);
+
 	uint32 blockSize = GetVolume()->BlockSize();
 	uint32 blockShift = GetVolume()->BlockShift();
 
-	// round up to a whole block
-	off_t newNumBlocks = (newSize + blockSize - 1) >> blockShift;
+	// fill in old values in the control
+	Control().stats.bitmap_blocks_old = GetVolume()->NumBitmapBlocks();
+	Control().stats.log_start_old = GetVolume()->Log().Start();
+	Control().stats.log_length_old = GetVolume()->Log().Length();
+
+	Control().stats.block_size = GetVolume()->BlockSize();
+
+	// calculate new values for the log and number of bitmap blocks
+	off_t numBlocks = (Control().new_size + blockSize - 1) >> blockShift;
+		// round up to a whole block
+
+	uint16 logLength = 2048;
+	if (numBlocks <= 20480)
+		logLength = 512;
+	if (Control().new_size > 1LL * 1024 * 1024 * 1024)
+		logLength = 4096;
+
+	fBitmapBlocks = (numBlocks + blockSize * 8 - 1) / (blockSize * 8);
+	fNewLog.SetTo(0, 1 + fBitmapBlocks, logLength);
+
+	off_t reservedLength = 1 + fBitmapBlocks + logLength;
+
+	// fill in new values
+	Control().stats.bitmap_blocks_new = fBitmapBlocks;
+	Control().stats.log_start_new = 1 + fBitmapBlocks;
+	Control().stats.log_length_new = logLength;
+
+
+	// See if the resize is actually possible
+
+	// the new size is limited by what we can fit into the first allocation
+	// group
+	if (reservedLength > (1UL << GetVolume()->AllocationGroupShift())) {
+		_SetError(B_BAD_VALUE, BFS_SIZE_TOO_LARGE);
+		return;
+	}
 
 	off_t diskSize;
 	status_t status = _TemporaryGetDiskSize(diskSize);
-	if (status != B_OK)
-		return status;
+	if (status != B_OK) {
+		_SetError(status);
+		return;
+	}
 
-	if (diskSize < (newNumBlocks << blockShift))
-		return B_BAD_VALUE;
+	if (diskSize < (numBlocks << blockShift)) {
+		_SetError(B_BAD_VALUE, BFS_DISK_TOO_SMALL);
+		return;
+	}
+
+	if (GetVolume()->UsedBlocks() > numBlocks) {
+		_SetError(B_BAD_VALUE, BFS_NO_SPACE);
+		return;
+	}
+
+	// stop now if we're only checking out the effects of a resize
+	if (Control().flags & BFS_CHECK_RESIZE)
+		return;
 
 	// make sure no unsynced transaction causes invalidated blocks to linger
 	// in the block cache when we write data with write_pos
 	status = GetVolume()->GetJournal(0)->FlushLogAndBlocks();
-	if (status != B_OK)
-		return status;
+	if (status != B_OK) {
+		_SetError(status);
+		return;
+	}
 
-	off_t newLogSize = 2048;
-	if (newNumBlocks <= 20480)
-		newLogSize = 512;
-	if (newSize > 1LL * 1024 * 1024 * 1024)
-		newLogSize = 4096;
+	fBeginBlock = reservedLength;
 
-	fBitmapBlocks = (newNumBlocks + blockSize * 8 - 1) / (blockSize * 8);
-	
-	// the new size is limited by what we can fit into the first allocation
-	// group
-	off_t newReservedLength = 1 + fBitmapBlocks + newLogSize;
-	if (newReservedLength > (1UL << GetVolume()->AllocationGroupShift()))
-		return B_BAD_VALUE;
-
-	fNewLog.SetTo(0, 1 + fBitmapBlocks, newLogSize);
-
-	fBeginBlock = newReservedLength;
-	fEndBlock = newNumBlocks;
-
-	if (newNumBlocks < GetVolume()->NumBlocks()) {
+	if (numBlocks < GetVolume()->NumBlocks()) {
 		fShrinking = true;
+		fEndBlock = numBlocks;
 	} else {
 		fShrinking = false;
-	} // aTODO handle no resize needed / no data moving needed
-		//if (newReservedLength
-			//> GetVolume()->Log().Start() + GetVolume()->Log().Length()) {
+		fEndBlock = GetVolume()->NumBlocks();
+	}
 
 	Start(VISIT_REGULAR | VISIT_INDICES | VISIT_REMOVED
 		| VISIT_ATTRIBUTE_DIRECTORIES);
-
-	/*
-	if (newNumBlocks < GetVolume()->NumBlocks()) {
-		// shrinking
-		//move data to allowed
-		//do resize
-		//move journal(?)
-	} else if (newNumBlocks > GetVolume()->NumBlocks()) {
-		// growing
-		if (newReservedLength
-			> GetVolume()->Log().Start() + GetVolume()->Log().Length()) {
-			//move data out of the area we need as reserved
-		}
-		//move journal
-		//do resize
-	} else {
-		// perhaps we should inform the user that no resize happened?
-	}
-	*/
-	return B_OK;
 }
 
 
-status_t
+void
 ResizeVisitor::FinishResize()
 {
+	_SetError(B_OK);
+
 	status_t status;
 
 	if (fShrinking) {
 		status = _ResizeVolume();
-		if (status != B_OK)
-			return status;
+		if (status != B_OK) {
+			_SetError(status, BFS_CHANGE_SIZE_FAILED);
+			return;
+		}
 
 		status = GetVolume()->GetJournal(0)->MoveLog(fNewLog);
-		if (status != B_OK)
-			return status;
+		if (status != B_OK) {
+			_SetError(status, BFS_MOVE_LOG_FAILED);
+			return;
+		}
 	} else {
 		status = GetVolume()->GetJournal(0)->MoveLog(fNewLog);
-		if (status != B_OK)
-			return status;
+		if (status != B_OK) {
+			_SetError(status, BFS_MOVE_LOG_FAILED);
+			return;
+		}
 
 		status = _ResizeVolume();
-		if (status != B_OK)
-			return status;
+		if (status != B_OK) {
+			_SetError(status, BFS_CHANGE_SIZE_FAILED);
+			return;
+		}
 	}
-	return B_OK;
 }
 
 
 status_t
 ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 {
+	Control().inode = inode->ID();
+	
+	// set name
+	if (treeName == NULL) {
+		if (inode->GetName(Control().name) < B_OK) {
+			if (inode->IsContainer())
+				strcpy(Control().name, "(dir has no name)");
+			else
+				strcpy(Control().name, "(node has no name)");
+		}
+	} else
+		strcpy(Control().name, treeName);
+
 	WriteLocker writeLocker(inode->Lock());
 
 	status_t status;
@@ -135,6 +178,7 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 		status = _MoveInode(inode, newInodeID);
 		if (status != B_OK) {
 			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
+			_SetError(status, BFS_MOVE_INODE_FAILED);
 			return status;
 		}
 
@@ -142,6 +186,7 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 			newInodeID);
 		if (status != B_OK) {
 			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
+			_SetError(status, BFS_MOVE_INODE_FAILED);
 			return status;
 		}
 
@@ -149,18 +194,25 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 
 		// accessing the inode with the new ID
 		mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
+
+		Control().stats.inodes_moved++;
 	}
 
 	// move the stream if necessary
 	bool inRange;
 	status = inode->StreamInRange(fBeginBlock, fEndBlock, inRange);
-	if (status != B_OK)
+	if (status != B_OK) {
+		_SetError(status, BFS_MOVE_STREAM_FAILED);
 		return status;
+	}
 
 	if (!inRange) {
 		status = inode->MoveStream(fBeginBlock, fEndBlock);
-		if (status != B_OK)
+		if (status != B_OK) {
+			_SetError(status, BFS_MOVE_STREAM_FAILED);
 			return status;
+		}
+		Control().stats.streams_moved++;
 	}
 
 	return B_OK;
@@ -171,19 +223,9 @@ status_t
 ResizeVisitor::OpenInodeFailed(status_t reason, ino_t id, Inode* parent,
 	char* treeName, TreeIterator* iterator)
 {
-	if (id < fBeginBlock || id >= fEndBlock) {
-		FATAL(("Could not open inode that needed to be moved at %" B_PRIdOFF
-			"\n", id));
-		return reason;
-	}
-
-	// if the inode is not outside the allowed area, we might be able to
-	// resize anyways
 	FATAL(("Could not open inode at %" B_PRIdOFF "\n", id));
 
-	if (fForce)
-		return B_OK;
-
+	_SetError(reason);
 	return reason;
 }
 
@@ -194,9 +236,7 @@ ResizeVisitor::OpenBPlusTreeFailed(Inode* inode)
 	FATAL(("Could not open b+tree from inode at %" B_PRIdOFF "\n",
 		inode->ID()));
 
-	if (fForce)
-		return B_OK;
-
+	_SetError(B_ERROR);
 	return B_ERROR;
 }
 
@@ -207,9 +247,7 @@ ResizeVisitor::TreeIterationFailed(status_t reason, Inode* parent)
 	FATAL(("Tree iteration failed in parent at %" B_PRIdOFF "\n",
 		parent->ID()));
 
-	if (fForce)
-		return B_OK;
-
+	_SetError(reason);
 	return reason;
 }
 
@@ -229,9 +267,8 @@ ResizeVisitor::_ResizeVolume()
 	}
 	
 	// make sure we have space to resize the bitmap
-	if (1 + fBitmapBlocks > GetVolume()->Log().Start()) {
+	if (1 + fBitmapBlocks > GetVolume()->Log().Start())
 		return B_ERROR;
-	}
 	
 	// clear bitmap blocks - aTODO maybe not use a transaction?
 	Transaction transaction(GetVolume(), 0);
@@ -450,6 +487,26 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID)
 		return status;
 
 	return transaction.Done();
+}
+
+
+bool
+ResizeVisitor::_ControlValid()
+{
+	if (Control().magic != BFS_IOCTL_RESIZE_MAGIC) {
+		FATAL(("invalid resize_control!\n"));
+		return false;
+	}
+
+	return true;
+}
+
+
+void
+ResizeVisitor::_SetError(status_t status, uint32 failurePoint)
+{
+	Control().status = status;
+	Control().failure_point = failurePoint;
 }
 
 

@@ -1,5 +1,6 @@
 /*
  * Copyright 2001-2012, Axel Dörfler, axeld@pinc-software.de
+ * Copyright 2012, Andreas Henriksson, sausageboy@gmail.com
  * This file may be used under the terms of the MIT License.
  */
 #ifndef BFS_CONTROL_H
@@ -28,6 +29,7 @@ struct update_boot_block {
 	const uint8*	data;
 	uint32			length;
 };
+
 
 /* ioctls to use the "chkbfs" feature from the outside
  * all calls use a struct check_result as single parameter
@@ -89,13 +91,61 @@ struct check_control {
 #define BFS_MISSING_BLOCKS		1
 #define BFS_BLOCKS_ALREADY_SET	2
 #define BFS_INVALID_BLOCK_RUN	4
-#define	BFS_COULD_NOT_OPEN		8
+#define BFS_COULD_NOT_OPEN		8
 #define BFS_WRONG_TYPE			16
 #define BFS_NAMES_DONT_MATCH	32
 #define BFS_INVALID_BPLUSTREE	64
 
 /* check control magic value */
 #define BFS_IOCTL_CHECK_MAGIC	'BChk'
+
+
+/* ioctls to resize the file system
+ * usage is analogous to that of "chkbfs" above
+ */
+#define BFS_IOCTL_START_RESIZE		14205
+#define BFS_IOCTL_FINISH_RESIZE		14206
+#define BFS_IOCTL_MOVE_NEXT_NODE	14207
+
+struct resize_control {
+	uint32		magic;
+	uint32		flags;
+	uint64		new_size;
+	char		name[B_FILE_NAME_LENGTH];
+	ino_t		inode;
+	uint32		failure_point;
+	struct {
+		uint64	inodes_moved;
+		uint64	streams_moved;
+
+		uint16	bitmap_blocks_new;
+		uint16	log_start_new;
+		uint16	log_length_new;
+
+		uint16	bitmap_blocks_old;
+		uint16	log_start_old;
+		uint16	log_length_old;
+
+		uint32	block_size;
+	} stats;
+	status_t	status;
+};
+
+/* resize flags */
+#define BFS_CHECK_RESIZE		1
+
+/* resize points of failure */
+#define BFS_OTHER_ERROR			1
+#define BFS_SIZE_TOO_LARGE		2
+#define BFS_DISK_TOO_SMALL		3
+#define BFS_NO_SPACE			4
+#define BFS_MOVE_LOG_FAILED		5
+#define BFS_MOVE_INODE_FAILED	6
+#define BFS_MOVE_STREAM_FAILED	7
+#define BFS_CHANGE_SIZE_FAILED	8
+
+/* magic resize constant */
+#define BFS_IOCTL_RESIZE_MAGIC	'BRsz'
 
 
 #endif	/* BFS_CONTROL_H */
