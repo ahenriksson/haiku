@@ -632,15 +632,18 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 		case BFS_IOCTL_START_CHECKING:
 		{
 			// start checking
-			CheckVisitor*& checker = volume->GetCheckVisitor();
-			checker = new CheckVisitor(volume);
+			status_t status = volume->CreateCheckVisitor();
+			if (status != B_OK)
+				return status;
+
+			CheckVisitor* checker = volume->CheckVisitor();
 
 			if (user_memcpy(&checker->Control(), buffer,
 					sizeof(check_control)) != B_OK) {
 				return B_BAD_ADDRESS;
 			}
 
-			status_t status = checker->StartBitmapPass();
+			status = checker->StartBitmapPass();
 			if (status == B_OK) {
 				file_cookie* cookie = (file_cookie*)_cookie;
 				cookie->open_mode |= BFS_OPEN_MODE_CHECKING;
@@ -651,7 +654,10 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 		case BFS_IOCTL_STOP_CHECKING:
 		{
 			// stop checking
-			CheckVisitor*& checker = volume->GetCheckVisitor();
+			CheckVisitor* checker = volume->CheckVisitor();
+			if (checker == NULL)
+				return B_NO_INIT;
+
 			status_t status = checker->StopChecking();
 
 			if (status == B_OK) {
@@ -662,8 +668,7 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 					sizeof(check_control));
 			}
 
-			delete checker;
-			checker = NULL;
+			volume->DeleteCheckVisitor();
 			volume->SetCheckingThread(-1);
 
 			return status;
@@ -671,7 +676,10 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 		case BFS_IOCTL_CHECK_NEXT_NODE:
 		{
 			// check next
-			CheckVisitor*& checker = volume->GetCheckVisitor();
+			CheckVisitor* checker = volume->CheckVisitor();
+			if (checker == NULL)
+				return B_NO_INIT;
+
 			volume->SetCheckingThread(find_thread(NULL));
 
 			checker->Control().errors = 0;
@@ -1526,8 +1534,8 @@ bfs_free_cookie(fs_volume* _volume, fs_vnode* _node, void* _cookie)
 	if ((cookie->open_mode & BFS_OPEN_MODE_CHECKING) != 0) {
 		// "chkbfs" exited abnormally, so we have to stop it here...
 		FATAL(("check process was aborted!\n"));
-		volume->GetCheckVisitor()->StopChecking();
-		delete volume->GetCheckVisitor();
+		volume->CheckVisitor()->StopChecking();
+		volume->DeleteCheckVisitor();
 	}
 
 	if ((cookie->open_mode & O_NOCACHE) != 0 && inode->FileCache() != NULL)

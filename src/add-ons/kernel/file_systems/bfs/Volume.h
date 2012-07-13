@@ -120,7 +120,9 @@ public:
 								{ fCheckingThread = thread; }
 			bool			IsCheckingThread() const
 								{ return find_thread(NULL) == fCheckingThread; }
-			CheckVisitor*&	GetCheckVisitor() { return fCheckVisitor; }
+			status_t		CreateCheckVisitor();
+			void			DeleteCheckVisitor();
+			::CheckVisitor*	CheckVisitor() { return fCheckVisitor; }
 
 			// resizing
 			// TODO / aTODO: do we need SetResizingThread?
@@ -181,7 +183,7 @@ protected:
 
 			void*			fBlockCache;
 			thread_id		fCheckingThread;
-			CheckVisitor*	fCheckVisitor;
+			::CheckVisitor*	fCheckVisitor;
 
 			ResizeVisitor*	fResizeVisitor;
 
