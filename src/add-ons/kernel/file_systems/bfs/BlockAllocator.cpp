@@ -506,8 +506,6 @@ BlockAllocator::BlockAllocator(Volume* volume)
 	:
 	fVolume(volume),
 	fGroups(NULL)
-	//fCheckBitmap(NULL),
-	//fCheckCookie(NULL)
 {
 	recursive_lock_init(&fLock, "bfs allocator");
 }
@@ -525,8 +523,6 @@ BlockAllocator::Initialize(bool full)
 {
 	fNumGroups = fVolume->AllocationGroups();
 	fBlocksPerGroup = fVolume->SuperBlock().BlocksPerAllocationGroup();
-	//fNumBlocks = (fVolume->NumBlocks() + fVolume->BlockSize() * 8 - 1)
-		/// (fVolume->BlockSize() * 8);
 	fNumBlocks = fVolume->NumBitmapBlocks();
 
 	fGroups = new(std::nothrow) AllocationGroup[fNumGroups];
