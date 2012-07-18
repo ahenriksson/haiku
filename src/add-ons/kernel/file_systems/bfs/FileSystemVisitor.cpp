@@ -153,7 +153,16 @@ FileSystemVisitor::Next()
 			fStack.Push(inode->Attributes());
 		}
 
-		return VisitInode(inode, name);
+		bool visitingCurrentDirectory = inode->BlockRun() == fCurrent;
+
+		status = VisitInode(inode, name);
+
+		// the inode id is allowed to change in the VisitInode() call, so we
+		// may need to change the inode reference
+		if (visitingCurrentDirectory)
+			fCurrent = inode->BlockRun();
+
+		return status;
 	}
 	// is never reached
 }
@@ -240,6 +249,8 @@ FileSystemVisitor::VisitDirectoryEntry(Inode* inode, Inode* parent,
 	Unless traversal has been stopped by an error handling function, all
 	calls to Next() end by invoking this function, and the return value
 	is passed along to the caller.
+
+	This call may change the inode ID.
 */
 status_t
 FileSystemVisitor::VisitInode(Inode* inode, const char* treeName)
