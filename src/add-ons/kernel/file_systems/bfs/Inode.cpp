@@ -599,6 +599,14 @@ Inode::InitCheck(bool checkNode) const
 }
 
 
+void
+Inode::SetID(ino_t ID)
+{
+	fID = ID;
+	fNode.inode_num = fVolume->ToBlockRun(ID);
+}
+
+
 /*!	Adds this inode to the specified transaction. This means that the inode will
 	be write locked until the transaction ended.
 	To ensure that the inode will stay valid until that point, an extra reference
@@ -2911,6 +2919,9 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 	}
 	
 	fNode.data = newStream;
+	status = WriteBack(transaction);
+	if (status != B_OK)
+		return status;
 
 	return transaction.Done();
 }

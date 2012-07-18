@@ -40,7 +40,7 @@ public:
 			ino_t				ID() const { return fID; }
 			off_t				BlockNumber() const
 									{ return fVolume->VnodeToBlock(fID); }
-			void				SetID(ino_t ID) { fID = ID; }
+			void				SetID(ino_t ID);
 
 			rw_lock&			Lock() { return fLock; }
 			ReadLocker			ReadLock() { return ReadLocker(fLock); }
