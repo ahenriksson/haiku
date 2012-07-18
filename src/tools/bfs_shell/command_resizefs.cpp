@@ -91,6 +91,7 @@ command_resizefs(int argc, const char* const* argv)
 	}
 
 	bool resizeFailed = false;
+	uint64 counter = 0;
 
 	// move all files out of the way
 	while (true) {
@@ -98,6 +99,9 @@ command_resizefs(int argc, const char* const* argv)
 			sizeof(result));
 		if (status == B_ENTRY_NOT_FOUND)
 			break;
+
+		if (++counter % 50 == 0)
+			fssh_dprintf("%9Ld nodes processed\x1b[1A\n", counter);
 
 		// we couldn't return the resizefs_control struct
 		if (status != B_OK) {
@@ -181,7 +185,7 @@ PrintError(const resize_control& result)
 void
 PrintStats(const resize_control& result)
 {
-	fssh_dprintf("\tInodes moved:       %" B_PRIu64 "\n",
+	fssh_dprintf("        Inodes moved:       %" B_PRIu64 "\n",
 		result.stats.inodes_moved);
 	fssh_dprintf("\tData streams moved: %" B_PRIu64 "\n\n",
 		result.stats.streams_moved);
