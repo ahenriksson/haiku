@@ -90,6 +90,8 @@ command_resizefs(int argc, const char* const* argv)
 		return B_OK;
 	}
 
+	bool resizeFailed = false;
+
 	// move all files out of the way
 	while (true) {
 		status = _kern_ioctl(rootDir, BFS_IOCTL_MOVE_NEXT_NODE, &result,
@@ -105,7 +107,7 @@ command_resizefs(int argc, const char* const* argv)
 
 		if (result.status != B_OK) {
 			PrintError(result);
-			status = result.status;
+			resizeFailed = true;
 			break;
 		}
 	}
@@ -120,10 +122,15 @@ command_resizefs(int argc, const char* const* argv)
 
 	_kern_close(rootDir);
 
+	if (result.status != B_OK) {
+		PrintError(result);
+		resizeFailed = true;
+	}
+
 	PrintStats(result);
 
-	if (result.status != B_OK)
-		PrintError(result);
+	if (resizeFailed)
+		fssh_dprintf("Failed to resize file system.\n");
 	else
 		fssh_dprintf("File system successfully resized!\n");
 

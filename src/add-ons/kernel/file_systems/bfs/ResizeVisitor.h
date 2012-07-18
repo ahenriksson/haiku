@@ -37,14 +37,21 @@ public:
 private:
 			status_t			_ResizeVolume();
 
+			// moving the inode
 			status_t			_UpdateParent(Transaction& transaction,
-									Inode* inode, off_t newInodeID);
+									Inode* inode, off_t newInodeID,
+									const char* treeName);
 			status_t			_UpdateAttributeDirectory(
 									Transaction& transaction, Inode* inode,
 									block_run newInodeRun);
 			status_t			_UpdateIndexReferences(Transaction& transaction,
 									Inode* inode, off_t newInodeID);
-			status_t			_MoveInode(Inode* inode, off_t& newInodeID);
+			status_t			_UpdateTree(Transaction& transaction,
+									Inode* inode, off_t newInodeID);
+			status_t			_UpdateChildren(Transaction& transaction,
+									Inode* inode, off_t newInodeID);
+			status_t			_MoveInode(Inode* inode, off_t& newInodeID,
+									const char* treeName);
 
 			bool				_ControlValid();
 
