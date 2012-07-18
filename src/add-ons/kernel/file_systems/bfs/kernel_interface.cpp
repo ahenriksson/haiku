@@ -766,9 +766,9 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 				return B_NO_INIT;
 
 			if (resizer->Next() == B_ENTRY_NOT_FOUND) {
-				// other return values will be saved away in the
-				// resize_control
-				return B_ENTRY_NOT_FOUND;
+				// are we really done, or is this an error?
+				if (resizer->Control().status == B_OK)
+					return B_ENTRY_NOT_FOUND;
 			}
 
 			return user_memcpy(buffer, &resizer->Control(),
