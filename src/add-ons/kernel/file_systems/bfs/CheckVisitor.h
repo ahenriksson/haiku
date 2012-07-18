@@ -35,9 +35,6 @@ public:
 			status_t			StartIndexPass();
 			status_t			StopChecking();
 
-			bool				HasIndicesToRebuild()
-									{ return !indices.IsEmpty(); }
-
 	virtual status_t			VisitDirectoryEntry(Inode* inode,
 									Inode* parent, const char* treeName);
 	virtual status_t			VisitInode(Inode* inode, const char* treeName);

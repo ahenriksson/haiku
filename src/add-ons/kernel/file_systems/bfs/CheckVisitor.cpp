@@ -162,6 +162,10 @@ CheckVisitor::WriteBackCheckBitmap()
 status_t
 CheckVisitor::StartIndexPass()
 {
+	// if we don't have indices to rebuild, this pass is done
+	if (indices.IsEmpty())
+		return B_ENTRY_NOT_FOUND;
+
 	Control().pass = BFS_CHECK_PASS_INDEX;
 
 	status_t status = _PrepareIndices();
@@ -171,8 +175,7 @@ CheckVisitor::StartIndexPass()
 	}
 
 	Start(VISIT_REGULAR);
-
-	return B_OK;
+	return Next();
 }
 
 
@@ -199,8 +202,14 @@ status_t
 CheckVisitor::VisitDirectoryEntry(Inode* inode, Inode* parent,
 	const char* treeName)
 {
+	Control().inode = inode->ID();
+	Control().mode = inode->Mode();
+
+	if (Pass() != BFS_CHECK_PASS_BITMAP)
+		return B_OK;
+
 	// check if the inode's name is the same as in the b+tree
-	if (Pass() == BFS_CHECK_PASS_BITMAP && inode->IsRegularNode()) {
+	if (inode->IsRegularNode()) {
 		RecursiveLocker locker(inode->SmallDataLock());
 		NodeGetter node(GetVolume(), inode);
 
@@ -229,17 +238,14 @@ CheckVisitor::VisitDirectoryEntry(Inode* inode, Inode* parent,
 		}
 	}
 
-	Control().mode = inode->Mode();
-
 	// Check for the correct mode of the node (if the mode of the
 	// file don't fit to its parent, there is a serious problem)
-	if (Pass() == BFS_CHECK_PASS_BITMAP
-		&& (((parent->Mode() & S_ATTR_DIR) != 0
-				&& !inode->IsAttribute())
-			|| ((parent->Mode() & S_INDEX_DIR) != 0
-				&& !inode->IsIndex())
-			|| (is_directory(parent->Mode())
-				&& !inode->IsRegularNode()))) {
+	if (((parent->Mode() & S_ATTR_DIR) != 0
+			&& !inode->IsAttribute())
+		|| ((parent->Mode() & S_INDEX_DIR) != 0
+			&& !inode->IsIndex())
+		|| (is_directory(parent->Mode())
+			&& !inode->IsRegularNode())) {
 		FATAL(("inode at %" B_PRIdOFF " is of wrong type: %o (parent "
 			"%o at %" B_PRIdOFF ")!\n", inode->BlockNumber(),
 			inode->Mode(), parent->Mode(), parent->BlockNumber()));
@@ -261,8 +267,9 @@ CheckVisitor::VisitDirectoryEntry(Inode* inode, Inode* parent,
 status_t
 CheckVisitor::VisitInode(Inode* inode, const char* treeName)
 {
+	Control().inode = inode->ID();
 	Control().mode = inode->Mode();
-		// (we might have set the mode in VisitDirectoryEntry already)
+		// (we might have set these in VisitDirectoryEntry already)
 
 	// set name
 	if (treeName == NULL) {

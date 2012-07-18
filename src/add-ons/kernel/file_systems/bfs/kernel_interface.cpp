@@ -690,13 +690,8 @@ bfs_ioctl(fs_volume* _volume, fs_vnode* _node, void* _cookie, uint32 cmd,
 					// tells StopChecking() that we finished the pass
 
 				if (checker->Pass() == BFS_CHECK_PASS_BITMAP) {
-					checker->WriteBackCheckBitmap();
-
-					if (status == B_OK && checker->HasIndicesToRebuild()) {
-						// enter rebuild index pass
-						checker->StartIndexPass();
-						status = checker->Next();
-					}
+					if (checker->WriteBackCheckBitmap() == B_OK)
+						status = checker->StartIndexPass();
 				}
 			}
 			
