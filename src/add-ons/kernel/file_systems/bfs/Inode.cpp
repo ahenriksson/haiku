@@ -1223,7 +1223,7 @@ Inode::ReadAttribute(const char* name, int32 type, off_t pos, uint8* buffer,
 		ReleaseAttribute(attribute);
 	}
 
-	RETURN_ERROR(status);
+	return status;
 }
 
 
