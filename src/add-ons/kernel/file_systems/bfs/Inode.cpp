@@ -602,6 +602,10 @@ Inode::InitCheck(bool checkNode) const
 void
 Inode::SetID(ino_t ID)
 {
+	// set parent ID if we are our own parent
+	if (Parent() == BlockRun())
+		fNode.parent = fVolume->ToBlockRun(ID);
+
 	fID = ID;
 	fNode.inode_num = fVolume->ToBlockRun(ID);
 }
@@ -3363,8 +3367,15 @@ Inode::Copy(Transaction& transaction, off_t targetBlock)
 
 	memcpy(targetData, sourceData, fVolume->BlockSize());
 
+	block_run targetRun = fVolume->ToBlockRun(targetBlock);
+
 	// update inode ID in target block
-	target.WritableNode()->inode_num = fVolume->ToBlockRun(targetBlock);
+	target.WritableNode()->inode_num = targetRun;
+
+	// also update parent reference in the rare case of us being our
+	// own parent
+	if (Parent() == BlockRun())
+		target.WritableNode()->parent = targetRun;
 
 	return B_OK;
 }

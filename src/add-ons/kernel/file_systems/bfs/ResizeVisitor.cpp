@@ -327,10 +327,6 @@ status_t
 ResizeVisitor::_UpdateParent(Transaction& transaction, Inode* inode,
 	off_t newInodeID, const char* treeName)
 {
-	// are we the root node or index directory?
-	if (inode->BlockRun() == inode->Parent())
-		return B_OK;
-
 	// get Inode of parent
 	Vnode parentVnode(GetVolume(), inode->Parent());
 	Inode* parent;
@@ -382,7 +378,7 @@ ResizeVisitor::_UpdateAttributeDirectory(Transaction& transaction, Inode* inode,
 
 status_t
 ResizeVisitor::_UpdateIndexReferences(Transaction& transaction, Inode* inode,
-	off_t newInodeID)
+	off_t newInodeID, bool rootOrIndexDir)
 {
 	// update user file attributes
 	AttributeIterator iterator(inode);
@@ -417,7 +413,9 @@ ResizeVisitor::_UpdateIndexReferences(Transaction& transaction, Inode* inode,
 	}
 
 	// update built-in attributes
-	if (inode->InNameIndex()) {
+
+	// the root node is not in the name index even though InNameIndex() is true
+	if (inode->InNameIndex() && !rootOrIndexDir) {
 		status = index.SetTo("name");
 		if (status != B_OK)
 			return status;
@@ -535,9 +533,33 @@ ResizeVisitor::_UpdateChildren(Transaction& transaction, Inode* inode,
 
 
 status_t
+ResizeVisitor::_UpdateSuperBlock(Inode* inode, off_t newInodeID)
+{
+	MutexLocker(GetVolume()->Lock());
+	disk_super_block& superBlock = GetVolume()->SuperBlock();
+	
+	if (inode->BlockRun() == superBlock.root_dir) {
+		INFORM(("New root directory: block %" B_PRIdOFF "\n", newInodeID));
+		superBlock.root_dir = GetVolume()->ToBlockRun(newInodeID);
+	} else if (inode->BlockRun() == superBlock.indices) {
+		INFORM(("New index directory: block %" B_PRIdOFF "\n", newInodeID));
+		superBlock.indices = GetVolume()->ToBlockRun(newInodeID);
+	} else {
+		FATAL(("_UpdateSuperBlock: Expected inode %" B_PRIdINO
+			" to be root or index directory!\n", inode->ID()));
+		return B_BAD_VALUE;
+	}
+
+	return GetVolume()->WriteSuperBlock();
+}
+
+
+status_t
 ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 {
 	Transaction transaction(GetVolume(), 0);
+
+	bool rootOrIndexDir = inode->BlockRun() == inode->Parent();
 
 	block_run run;
 	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction, 0, 0,
@@ -554,9 +576,11 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 	if (status != B_OK)
 		return status;
 
-	status = _UpdateParent(transaction, inode, newInodeID, treeName);
-	if (status != B_OK)
-		return status;
+	if (!rootOrIndexDir) {
+		status = _UpdateParent(transaction, inode, newInodeID, treeName);
+		if (status != B_OK)
+			return status;
+	}
 
 	// update parent reference in attribute directory if we have one
 	if (!inode->Attributes().IsZero()) {
@@ -565,7 +589,8 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 			return status;
 	}
 
-	status = _UpdateIndexReferences(transaction, inode, newInodeID);
+	status = _UpdateIndexReferences(transaction, inode, newInodeID,
+		rootOrIndexDir);
 	if (status != B_OK)
 		return status;
 
@@ -586,7 +611,20 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 	if (status != B_OK)
 		return status;
 
-	return transaction.Done();
+	status = transaction.Done();
+	if (status != B_OK)
+		return status;
+
+	if (rootOrIndexDir) {
+		status = _UpdateSuperBlock(inode, newInodeID);
+		if (status != B_OK) {
+			// we've already completed the transaction, this is very bad
+			FATAL(("_MoveInode: Could not write super block!\n"));
+			return status;
+		}
+	}
+
+	return B_OK;
 }
 
 
