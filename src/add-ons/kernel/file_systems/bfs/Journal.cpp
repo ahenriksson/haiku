@@ -1111,13 +1111,17 @@ Journal::MoveLog(block_run newLog)
 		Transaction transaction(fVolume, 0);
 
 		status = allocator.AllocateBlocks(transaction, 0, oldEnd,
-			allocationSize, allocationSize, allocatedRun, oldEnd, newEnd);
+			allocationSize, 1, allocatedRun, oldEnd, newEnd);
 		if (status != B_OK)
 			return status;
 
-		ASSERT(allocatedRun.AllocationGroup() == 0);
-		ASSERT(allocatedRun.Start() == oldEnd);
-		ASSERT(allocatedRun.Length() == allocationSize);
+		if (allocatedRun.AllocationGroup() != 0
+			|| allocatedRun.Start() != oldEnd
+			|| allocatedRun.Length() != allocationSize) {
+			// we couldn't allocate what we wanted, this means that we
+			// failed to move all data from this area
+			return B_ERROR;
+		}
 
 		status = transaction.Done();
 		if (status != B_OK)
