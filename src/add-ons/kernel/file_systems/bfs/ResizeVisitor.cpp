@@ -67,14 +67,13 @@ ResizeVisitor::StartResize()
 		return;
 	}
 
-	off_t diskSize;
-	status_t status = _TemporaryGetDiskSize(diskSize);
+	status_t status = GetVolume()->UpdateDeviceSize();
 	if (status != B_OK) {
 		_SetError(status);
 		return;
 	}
 
-	if (diskSize < (fNumBlocks << blockShift)) {
+	if (GetVolume()->DeviceSize() < (fNumBlocks << blockShift)) {
 		_SetError(B_BAD_VALUE, BFS_DISK_TOO_SMALL);
 		return;
 	}
@@ -645,25 +644,4 @@ ResizeVisitor::_SetError(status_t status, uint32 failurePoint)
 {
 	Control().status = status;
 	Control().failure_point = failurePoint;
-}
-
-
-status_t
-ResizeVisitor::_TemporaryGetDiskSize(off_t& size)
-{
-	device_geometry geometry;
-	if (ioctl(GetVolume()->Device(), B_GET_GEOMETRY, &geometry) < 0) {
-		// maybe it's just a file
-		struct stat stat;
-		if (fstat(GetVolume()->Device(), &stat) < 0)
-			return B_ERROR;
-
-		size = stat.st_size;
-		return B_OK;
-	}
-
-	size = 1LL * geometry.head_count * geometry.cylinder_count
-		* geometry.sectors_per_track * geometry.bytes_per_sector;
-
-	return B_OK;
 }

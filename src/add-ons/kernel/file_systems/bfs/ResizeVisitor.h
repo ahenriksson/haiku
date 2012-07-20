@@ -61,8 +61,6 @@ private:
 			void				_SetError(status_t status,
 									uint32 failurePoint = BFS_OTHER_ERROR);
 
-			status_t			_TemporaryGetDiskSize(off_t& size);
-
 private:
 			resize_control		fControl;
 			bool				fShrinking;
