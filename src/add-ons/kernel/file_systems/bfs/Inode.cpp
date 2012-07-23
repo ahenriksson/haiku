@@ -2765,6 +2765,52 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 }
 
 
+status_t
+Inode::_FreeIndirectBlocks(Transaction& transaction, data_stream *dataStream)
+{
+	if (dataStream->indirect.IsZero())
+		return B_OK;
+
+	// free single indirect run
+	status_t status = fVolume->Free(transaction, dataStream->indirect);
+	if (status != B_OK)
+		return status;
+
+	if (dataStream->double_indirect.IsZero())
+		return B_OK;
+
+	int32 runsPerBlock = fVolume->BlockSize() / sizeof(block_run);
+	bool endOfStream = false;
+	CachedBlock cached(fVolume);
+
+	for (uint16 blockIndex = 0;
+			blockIndex < dataStream->double_indirect.Length(); blockIndex++) {
+		// get the double indirect array runs in this block
+		off_t block = fVolume->ToBlock(dataStream->double_indirect)
+			+ blockIndex;
+		const block_run* runArray = (const block_run*)cached.SetTo(block);
+
+		for (int32 i = 0; i < runsPerBlock; i++) {
+			if (runArray[i].IsZero()) {
+				endOfStream = true;
+				break;
+			}
+
+			// free double indirect array run
+			status = fVolume->Free(transaction, runArray[i]);
+			if (status != B_OK)
+				return status;
+		}
+
+		if (endOfStream)
+			break;
+	}
+
+	// free double indirect run
+	return fVolume->Free(transaction, dataStream->double_indirect);
+}
+
+
 /*! Get the block run that covers the file position \a position.
 	\a position is updated to point at the first position covered by
 	the following run.
@@ -2921,6 +2967,8 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 		if (status != B_OK)
 			return status;
 	}
+
+	_FreeIndirectBlocks(transaction, &fNode.data);
 	
 	fNode.data = newStream;
 	status = WriteBack(transaction);

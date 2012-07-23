@@ -268,6 +268,8 @@ private:
 									data_stream* dataStream, off_t targetSize,
 									bool flush = false, off_t beginBlock = 0,
 									off_t endBlock = 0);
+			status_t			_FreeIndirectBlocks(Transaction& transaction,
+									data_stream *dataStream);
 
 			status_t			_GetNextBlockRun(off_t& position,
 									block_run& run) const;
