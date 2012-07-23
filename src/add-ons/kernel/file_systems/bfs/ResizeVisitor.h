@@ -20,10 +20,7 @@ class ResizeVisitor : public FileSystemVisitor {
 public:
 								ResizeVisitor(Volume* volume);
 
-	void						StartResize();
-	void						FinishResize();
-
-	resize_control&				Control() { return fControl; }
+			status_t			Resize(off_t size, disk_job_id job);
 
 	virtual status_t			VisitInode(Inode* inode, const char* treeName);
 
@@ -35,6 +32,8 @@ public:
 									Inode* parent);
 
 private:
+			void				_CalculateNewSizes(off_t size);
+			status_t			_IsResizePossible(off_t size);
 			status_t			_ResizeVolume();
 
 			// moving the inode
@@ -56,23 +55,19 @@ private:
 			status_t			_MoveInode(Inode* inode, off_t& newInodeID,
 									const char* treeName);
 
-			bool				_ControlValid();
-
-			void				_SetError(status_t status,
-									uint32 failurePoint = BFS_OTHER_ERROR);
-
 private:
-			resize_control		fControl;
-			bool				fShrinking;
+			bool				fError;
 
 			off_t				fNumBlocks;
+			off_t				fBitmapBlocks;
+			off_t				fReservedLength;
+
+			block_run			fNewLog;
 
 			off_t				fBeginBlock;
 			off_t				fEndBlock;
 
-			off_t				fBitmapBlocks;
-
-			block_run			fNewLog;
+			bool				fShrinking;
 };
 
 

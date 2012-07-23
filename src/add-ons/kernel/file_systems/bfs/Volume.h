@@ -127,11 +127,6 @@ public:
 			void			DeleteCheckVisitor();
 			::CheckVisitor*	CheckVisitor() { return fCheckVisitor; }
 
-			// resizing
-			status_t		CreateResizeVisitor();
-			void			DeleteResizeVisitor();
-			::ResizeVisitor* ResizeVisitor() { return fResizeVisitor; }
-
 			// cache access
 			status_t		WriteSuperBlock();
 			status_t		FlushDevice();
@@ -189,8 +184,6 @@ protected:
 			void*			fBlockCache;
 			thread_id		fCheckingThread;
 			::CheckVisitor*	fCheckVisitor;
-
-			::ResizeVisitor* fResizeVisitor;
 
 			InodeList		fRemovedInodes;
 };

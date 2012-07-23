@@ -22,148 +22,94 @@ ResizeVisitor::ResizeVisitor(Volume* volume)
 }
 
 
-void
-ResizeVisitor::StartResize()
+status_t
+ResizeVisitor::Resize(off_t size, disk_job_id job)
 {
-	_SetError(B_OK);
+	_CalculateNewSizes(size);
 
-	uint32 blockSize = GetVolume()->BlockSize();
-	uint32 blockShift = GetVolume()->BlockShift();
+	status_t status = _IsResizePossible(size);
+	if (status != B_OK)
+		return status;
 
-	// fill in old values in the control
-	Control().stats.bitmap_blocks_old = GetVolume()->NumBitmapBlocks();
-	Control().stats.log_start_old = GetVolume()->Log().Start();
-	Control().stats.log_length_old = GetVolume()->Log().Length();
-
-	Control().stats.block_size = GetVolume()->BlockSize();
-
-	// calculate new values for the log and number of bitmap blocks
-	fNumBlocks = (Control().new_size + blockSize - 1) >> blockShift;
-		// round up to a whole block
-
-	uint16 logLength = 2048;
-	if (fNumBlocks <= 20480)
-		logLength = 512;
-	if (Control().new_size > 1LL * 1024 * 1024 * 1024)
-		logLength = 4096;
-
-	fBitmapBlocks = (fNumBlocks + blockSize * 8 - 1) / (blockSize * 8);
-	fNewLog.SetTo(0, 1 + fBitmapBlocks, logLength);
-
-	off_t reservedLength = 1 + fBitmapBlocks + logLength;
-
-	// fill in new values
-	Control().stats.bitmap_blocks_new = fBitmapBlocks;
-	Control().stats.log_start_new = 1 + fBitmapBlocks;
-	Control().stats.log_length_new = logLength;
-
-
-	// See if the resize is actually possible
-
-	// the new size is limited by what we can fit into the first allocation
-	// group
-	if (reservedLength > (1UL << GetVolume()->AllocationGroupShift())) {
-		_SetError(B_BAD_VALUE, BFS_SIZE_TOO_LARGE);
-		return;
+	if (fNumBlocks == GetVolume()->NumBlocks()) {
+		INFORM(("Resize: New size was equal to old.\n"));
+		return B_OK;
 	}
-
-	status_t status = GetVolume()->UpdateDeviceSize();
-	if (status != B_OK) {
-		_SetError(status);
-		return;
-	}
-
-	if (GetVolume()->DeviceSize() < (fNumBlocks << blockShift)) {
-		_SetError(B_BAD_VALUE, BFS_DISK_TOO_SMALL);
-		return;
-	}
-
-	if (GetVolume()->UsedBlocks() > fNumBlocks) {
-		_SetError(B_BAD_VALUE, BFS_NO_SPACE);
-		return;
-	}
-
-	// stop now if we're only checking out the effects of a resize
-	if (Control().flags & BFS_CHECK_RESIZE)
-		return;
 
 	// make sure no unsynced transaction causes invalidated blocks to linger
 	// in the block cache when we write data with write_pos
+	// TODO: how does this work when the file system is mounted?
 	status = GetVolume()->GetJournal(0)->FlushLogAndBlocks();
 	if (status != B_OK) {
-		_SetError(status);
-		return;
+		FATAL(("Resize: Failed to flush log!\n"));
+		return status;
 	}
 
-	fBeginBlock = reservedLength;
-
-	if (fNumBlocks < GetVolume()->NumBlocks()) {
-		fShrinking = true;
-		fEndBlock = fNumBlocks;
-	} else {
-		fShrinking = false;
-		fEndBlock = GetVolume()->NumBlocks();
-	}
+	update_disk_device_job_progress(job, 0.0);
 
 	Start(VISIT_REGULAR | VISIT_INDICES | VISIT_REMOVED
 		| VISIT_ATTRIBUTE_DIRECTORIES);
-}
 
+	// move file system data out of the way
+	while (true) {
+		fError = false;
 
-void
-ResizeVisitor::FinishResize()
-{
-	if (Control().status != B_OK) {
-		_SetError(B_OK);
-		return;
+		status = Next();
+		if (fError)
+			return status;
+
+		if (status == B_ENTRY_NOT_FOUND)
+			break;
 	}
 
-	_SetError(B_OK);
-	status_t status;
-
+	// move log and change file system size in the superblock
 	if (fShrinking) {
 		status = _ResizeVolume();
 		if (status != B_OK) {
-			_SetError(status, BFS_CHANGE_SIZE_FAILED);
-			return;
+			FATAL(("Resize: Failed to update file system size!\n"));
+			return status;
 		}
 
 		status = GetVolume()->GetJournal(0)->MoveLog(fNewLog);
 		if (status != B_OK) {
-			_SetError(status, BFS_MOVE_LOG_FAILED);
-			return;
+			FATAL(("Resize: Failed to move the log area!\n"));
+			return status;
 		}
 	} else {
 		status = GetVolume()->GetJournal(0)->MoveLog(fNewLog);
 		if (status != B_OK) {
-			_SetError(status, BFS_MOVE_LOG_FAILED);
-			return;
+			FATAL(("Resize: Failed to move the log area!\n"));
+			return status;
 		}
 
 		status = _ResizeVolume();
 		if (status != B_OK) {
-			_SetError(status, BFS_CHANGE_SIZE_FAILED);
-			return;
+			FATAL(("Resize: Failed to update file system size!\n"));
+			return status;
 		}
 	}
+
+	update_disk_device_job_progress(job, 1.0);
+	return B_OK;
 }
 
 
 status_t
 ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 {
-	Control().inode = inode->ID();
+	// get the name so we can show it to the user if something goes wrong
+	// TODO: we don't really have to do this for every inode we visit
+	char name[B_FILE_NAME_LENGTH];
 	
-	// set name
 	if (treeName == NULL) {
-		if (inode->GetName(Control().name) < B_OK) {
+		if (inode->GetName(name) < B_OK) {
 			if (inode->IsContainer())
-				strcpy(Control().name, "(dir has no name)");
+				strcpy(name, "(dir has no name)");
 			else
-				strcpy(Control().name, "(node has no name)");
+				strcpy(name, "(node has no name)");
 		}
 	} else
-		strcpy(Control().name, treeName);
+		strcpy(name, treeName);
 
 	WriteLocker writeLocker(inode->Lock());
 
@@ -181,7 +127,9 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 		status = _MoveInode(inode, newInodeID, treeName);
 		if (status != B_OK) {
 			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
-			_SetError(status, BFS_MOVE_INODE_FAILED);
+			FATAL(("Resize: Failed to move inode %" B_PRIdINO
+				", \"%s\"!\n", inode->ID(), name));
+			fError = true;
 			return status;
 		}
 
@@ -189,7 +137,9 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 			newInodeID);
 		if (status != B_OK) {
 			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
-			_SetError(status, BFS_MOVE_INODE_FAILED);
+			FATAL(("Resize: Failed to change ID in vnode, inode %" B_PRIdINO
+				", \"%s\"!\n", inode->ID(), name));
+			fError = true;
 			return status;
 		}
 
@@ -197,25 +147,26 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 
 		// accessing the inode with the new ID
 		mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
-
-		Control().stats.inodes_moved++;
 	}
 
 	// move the stream if necessary
 	bool inRange;
 	status = inode->StreamInRange(fBeginBlock, fEndBlock, inRange);
 	if (status != B_OK) {
-		_SetError(status, BFS_MOVE_STREAM_FAILED);
+		FATAL(("Resize: Failed to check file stream, inode %" B_PRIdINO
+			", \"%s\"!\n", inode->ID(), name));
+		fError = true;
 		return status;
 	}
 
 	if (!inRange) {
 		status = inode->MoveStream(fBeginBlock, fEndBlock);
 		if (status != B_OK) {
-			_SetError(status, BFS_MOVE_STREAM_FAILED);
+			FATAL(("Resize: Failed to move file stream, inode %" B_PRIdINO
+				", \"%s\"!\n", inode->ID(), name));
+			fError = true;
 			return status;
 		}
-		Control().stats.streams_moved++;
 	}
 
 	return B_OK;
@@ -228,7 +179,7 @@ ResizeVisitor::OpenInodeFailed(status_t reason, ino_t id, Inode* parent,
 {
 	FATAL(("Could not open inode at %" B_PRIdOFF "\n", id));
 
-	_SetError(reason);
+	fError = true;
 	return reason;
 }
 
@@ -239,7 +190,7 @@ ResizeVisitor::OpenBPlusTreeFailed(Inode* inode)
 	FATAL(("Could not open b+tree from inode at %" B_PRIdOFF "\n",
 		inode->ID()));
 
-	_SetError(B_ERROR);
+	fError = true;
 	return B_ERROR;
 }
 
@@ -250,8 +201,70 @@ ResizeVisitor::TreeIterationFailed(status_t reason, Inode* parent)
 	FATAL(("Tree iteration failed in parent at %" B_PRIdOFF "\n",
 		parent->ID()));
 
-	_SetError(reason);
+	fError = true;
 	return reason;
+}
+
+
+void
+ResizeVisitor::_CalculateNewSizes(off_t size)
+{
+	uint32 blockSize = GetVolume()->BlockSize();
+	uint32 blockShift = GetVolume()->BlockShift();
+
+	fNumBlocks = size >> blockShift;
+
+	fBitmapBlocks = (fNumBlocks + blockSize * 8 - 1) / (blockSize * 8);
+		// divide total number of blocks by the number of bits in a bitmap
+		// block, rounding up
+
+	off_t logLength = Volume::CalculateLogSize(fNumBlocks, size);
+
+	fNewLog.SetTo(0, 1 + fBitmapBlocks, logLength);
+	fReservedLength = 1 + fBitmapBlocks + logLength;
+
+	fBeginBlock = fReservedLength;
+
+	if (fNumBlocks < GetVolume()->NumBlocks()) {
+		fShrinking = true;
+		fEndBlock = fNumBlocks;
+	} else {
+		fShrinking = false;
+		fEndBlock = GetVolume()->NumBlocks();
+	}
+}
+
+
+status_t
+ResizeVisitor::_IsResizePossible(off_t size)
+{
+	if ((size % GetVolume()->BlockSize()) != 0) {
+		FATAL(("Resize: New size not multiple of block size!\n"));
+		return B_BAD_VALUE;
+	}
+
+	// the new size is limited by what we can fit into the first allocation
+	// group
+	if (fReservedLength > (1UL << GetVolume()->AllocationGroupShift())) {
+		FATAL(("Resize: Reserved area is too large for allocation group!\n"));
+		return B_BAD_VALUE;
+	}
+
+	status_t status = GetVolume()->UpdateDeviceSize();
+	if (status != B_OK)
+		return status;
+
+	if (GetVolume()->DeviceSize() < size) {
+		FATAL(("Resize: Device too small for new size\n"));
+		return B_BAD_VALUE;
+	}
+
+	if (GetVolume()->UsedBlocks() > fNumBlocks) {
+		FATAL(("Resize: Not enough free space for resize!\n"));
+		return B_BAD_VALUE;
+	}
+
+	return B_OK;
 }
 
 
@@ -268,11 +281,11 @@ ResizeVisitor::_ResizeVolume()
 		if (status != B_OK)
 			return status;
 	}
-	
+
 	// make sure we have space to resize the bitmap
 	if (1 + fBitmapBlocks > GetVolume()->Log().Start())
 		return B_ERROR;
-	
+
 	// clear bitmap blocks - aTODO maybe not use a transaction?
 	Transaction transaction(GetVolume(), 0);
 
@@ -290,7 +303,7 @@ ResizeVisitor::_ResizeVolume()
 	status = transaction.Done();
 	if (status != B_OK)
 		return status;
-	
+
 	// update superblock and volume information
 	disk_super_block& superBlock = GetVolume()->SuperBlock();
 
@@ -628,24 +641,4 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 	}
 
 	return B_OK;
-}
-
-
-bool
-ResizeVisitor::_ControlValid()
-{
-	if (Control().magic != BFS_IOCTL_RESIZE_MAGIC) {
-		FATAL(("invalid resize_control!\n"));
-		return false;
-	}
-
-	return true;
-}
-
-
-void
-ResizeVisitor::_SetError(status_t status, uint32 failurePoint)
-{
-	Control().status = status;
-	Control().failure_point = failurePoint;
 }
