@@ -534,7 +534,7 @@ ResizeVisitor::_UpdateChildren(Transaction& transaction, Inode* inode,
 status_t
 ResizeVisitor::_UpdateSuperBlock(Inode* inode, off_t newInodeID)
 {
-	MutexLocker(GetVolume()->Lock());
+	MutexLocker locker(GetVolume()->Lock());
 	disk_super_block& superBlock = GetVolume()->SuperBlock();
 	
 	if (inode->BlockRun() == superBlock.root_dir) {
