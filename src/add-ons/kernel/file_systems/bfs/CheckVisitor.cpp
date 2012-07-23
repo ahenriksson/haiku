@@ -574,7 +574,7 @@ CheckVisitor::_CheckInodeBlocks(Inode* inode, const char* name)
 					Control().stats.double_indirect_block_runs++;
 					Control().stats.blocks_in_double_indirect
 						+= runs[index % runsPerBlock].Length();
-				} while ((++index % runsPerArray) != 0);
+				} while ((++index % runsPerBlock) != 0);
 			}
 
 			Control().stats.double_indirect_array_blocks++;
