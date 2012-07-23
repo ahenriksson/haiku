@@ -2001,7 +2001,7 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
 		if (dataStream->double_indirect.IsZero()) {
 			status = _AllocateBlockArray(transaction,
 				dataStream->double_indirect, _DoubleIndirectBlockLength(),
-				beginBlock, endBlock);
+				false, beginBlock, endBlock);
 			if (status != B_OK)
 				return status;
 
@@ -2051,8 +2051,8 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
 
 					status = _AllocateBlockArray(transaction,
 						array[indirectIndex % runsPerBlock],
-						dataStream->double_indirect.Length(), beginBlock,
-						endBlock);
+						dataStream->double_indirect.Length(), false,
+						beginBlock, endBlock);
 					if (status != B_OK)
 						return status;
 				}
