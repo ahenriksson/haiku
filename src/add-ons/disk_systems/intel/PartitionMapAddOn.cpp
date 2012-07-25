@@ -531,3 +531,63 @@ PartitionMapHandle::DeleteChild(BMutablePartition* child)
 
 	return error;
 }
+
+
+status_t
+PartitionMapHandle::ValidateResizeChild(const BMutablePartition* child,
+	off_t* size)
+{
+	_FitSizeToSpace(child, size);
+	return B_OK;
+}
+
+
+status_t
+PartitionMapHandle::ResizeChild(BMutablePartition* child, off_t size)
+{
+	// is the new size valid?
+	off_t fittedSize = size;
+	_FitSizeToSpace(child, &fittedSize);
+
+	if (fittedSize != size)
+		return B_BAD_VALUE;
+
+	if (child->ContentSize() > size)
+		return B_BAD_VALUE;
+
+	// update data structures
+	::Partition* resizingPartition = fPartitionMap.PartitionAt(child->Index());
+
+	resizingPartition->SetSize(size);
+	child->SetSize(size);
+
+	return B_OK;
+}
+
+
+void
+PartitionMapHandle::_FitSizeToSpace(const BMutablePartition* child, off_t* size)
+{
+	int32 index = child->Index();
+	const ::Partition* resizingPartition = fPartitionMap.PartitionAt(index);
+
+	off_t newEndOffset = resizingPartition->Offset() + *size;
+
+	// check if any other partition overlaps the resized partition
+	int32 partitionCount = fPartitionMap.CountPartitions();
+
+	for (int32 i = 0; i < partitionCount; i++) {
+		if (i == index)
+			continue;
+
+		const ::Partition* otherPartition = fPartitionMap.PartitionAt(i);
+
+		if (resizingPartition->Offset() <= otherPartition->Offset()
+			&& otherPartition->Offset() < newEndOffset) {
+			// update size so the resizing partition fills the
+			// availible space
+			*size = otherPartition->Offset() - resizingPartition->Offset();
+			newEndOffset = resizingPartition->Offset() + *size;
+		}
+	}
+}

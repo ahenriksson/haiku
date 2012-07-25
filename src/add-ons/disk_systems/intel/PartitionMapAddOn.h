@@ -64,6 +64,16 @@ public:
 									BMutablePartition** child);
 	virtual status_t			DeleteChild(BMutablePartition* child);
 
+	virtual	status_t			ValidateResizeChild(
+									const BMutablePartition* child,
+									off_t* size);
+	virtual	status_t			ResizeChild(BMutablePartition* child,
+									off_t size);
+
+private:
+			void				_FitSizeToSpace(const BMutablePartition* child,
+									off_t* size);
+
 private:
 			PartitionMap		fPartitionMap;
 };
