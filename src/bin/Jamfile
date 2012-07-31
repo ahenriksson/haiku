@@ -100,6 +100,7 @@ StdBinCommands
 	play.cpp
 	query.cpp
 	quit.cpp
+	resizefs.cpp
 	roster.cpp
 	setversion.cpp
 	trash.cpp

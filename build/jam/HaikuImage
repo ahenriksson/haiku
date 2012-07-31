@@ -52,8 +52,8 @@ SYSTEM_BIN = "[" addattr alert arp base64 basename bash bc beep bfsinfo
 	passwd paste patch pathchk pc ping ping6 play playfile playsound playwav
 	pr prio printenv printf profile ps ptx pwd
 	query quit
-	rc readlink ReadOnlyBootPrompt reindex release renice rlog rm rmattr
-	rmindex rmdir roster route
+	rc readlink ReadOnlyBootPrompt reindex release renice resizefs rlog rm
+	rmattr rmindex rmdir roster route
 	safemode screen_blanker screenmode screenshot sdiff setdecor setmime settype
 	setversion setvolume seq sha1sum shar shred shuf shutdown sleep sort
 	spamdbm
