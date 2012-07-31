@@ -48,7 +48,7 @@ static const uint32 kDiskSystemFlags =
 //	| B_DISK_SYSTEM_SUPPORTS_DEFRAGMENTING_WHILE_MOUNTED
 	| B_DISK_SYSTEM_SUPPORTS_CHECKING_WHILE_MOUNTED
 	| B_DISK_SYSTEM_SUPPORTS_REPAIRING_WHILE_MOUNTED
-//	| B_DISK_SYSTEM_SUPPORTS_RESIZING_WHILE_MOUNTED
+	| B_DISK_SYSTEM_SUPPORTS_RESIZING_WHILE_MOUNTED
 //	| B_DISK_SYSTEM_SUPPORTS_MOVING_WHILE_MOUNTED
 //	| B_DISK_SYSTEM_SUPPORTS_SETTING_CONTENT_NAME_WHILE_MOUNTED
 //	| B_DISK_SYSTEM_SUPPORTS_SETTING_CONTENT_PARAMETERS_WHILE_MOUNTED
@@ -331,6 +331,51 @@ BFSPartitionHandle::Repair(bool checkOnly)
 		result.status = B_OK;
 
 	return result.status;
+}
+
+
+status_t
+BFSPartitionHandle::ValidateResize(off_t* size)
+{
+	return _FitSize(size);
+}
+
+
+status_t
+BFSPartitionHandle::Resize(off_t size)
+{
+	off_t fittedSize = size;
+	status_t status = _FitSize(&fittedSize);
+	if (status != B_OK)
+		return status;
+
+	if (fittedSize != size)
+		return B_BAD_VALUE;
+
+	Partition()->SetContentSize(size);
+
+	return B_OK;
+}
+
+
+status_t
+BFSPartitionHandle::_FitSize(off_t* size)
+{
+	BVolume volume(Partition()->VolumeID());
+	status_t status = volume.InitCheck();
+	if (status != B_OK)
+		return status;
+
+	if (*size < volume.Capacity() - volume.FreeBytes())
+		return B_DEVICE_FULL;
+
+	// TODO: we should check that the allocation groups are large enough to
+	// do the resize, but we'd need to ask the file system in some fashion.
+
+	// round down to BFS block size
+	*size -= *size % volume.BlockSize();
+
+	return B_OK;
 }
 
 

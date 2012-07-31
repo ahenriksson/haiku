@@ -8,6 +8,9 @@
 #include <DiskSystemAddOn.h>
 
 
+struct fs_info;
+
+
 class BFSAddOn : public BDiskSystemAddOn {
 public:
 								BFSAddOn();
@@ -42,6 +45,12 @@ public:
 	virtual	uint32				SupportedOperations(uint32 mask);
 
 	virtual	status_t			Repair(bool checkOnly);
+
+	virtual	status_t			ValidateResize(off_t* size);
+	virtual	status_t			Resize(off_t size);
+
+private:
+			status_t			_FitSize(off_t* size);
 };
 
 
