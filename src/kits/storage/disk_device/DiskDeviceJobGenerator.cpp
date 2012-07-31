@@ -193,7 +193,7 @@ DiskDeviceJobGenerator::_GenerateCleanupJobs(BPartition* partition)
 // all descendants of a partition to be uninitialized or removed.
 	if (BMutablePartition* shadow = _GetMutablePartition(partition)) {
 		if ((shadow->ChangeFlags() & B_PARTITION_CHANGED_INITIALIZATION)
-			&& partition->fPartitionData->content_type) {
+			&& partition->OriginalContentType()) {
 			// partition changes initialization
 			status_t error = _GenerateUninitializeJob(partition);
 			if (error != B_OK)
@@ -224,12 +224,12 @@ DiskDeviceJobGenerator::_GeneratePlacementJobs(BPartition* partition)
 		// Don't resize/move partitions that have an unrecognized contents.
 		// They must have been uninitialized before.
 		if (shadow->Status() == B_PARTITION_UNRECOGNIZED
-			&& (shadow->Size() != partition->Size()
-				|| shadow->Offset() != partition->Offset())) {
+			&& (shadow->Size() != partition->OriginalSize()
+				|| shadow->Offset() != partition->OriginalOffset())) {
 			return B_ERROR;
 		}
 
-		if (shadow->Size() > partition->Size()) {
+		if (shadow->Size() > partition->OriginalSize()) {
 			// size grows: resize first
 			status_t error = _GenerateResizeJob(partition);
 			if (error != B_OK)
@@ -241,7 +241,7 @@ DiskDeviceJobGenerator::_GeneratePlacementJobs(BPartition* partition)
 		if (error != B_OK)
 			return error;
 
-		if (shadow->Size() < partition->Size()) {
+		if (shadow->Size() < partition->OriginalSize()) {
 			// size shrinks: resize now
 			status_t error = _GenerateResizeJob(partition);
 			if (error != B_OK)
@@ -287,7 +287,7 @@ DiskDeviceJobGenerator::_GenerateChildPlacementJobs(BPartition* partition)
 				moveBack++;
 
 			// resize the child, if it shall shrink
-			if (childShadow->Size() < child->Size()) {
+			if (childShadow->Size() < child->OriginalSize()) {
 				status_t error = _GeneratePlacementJobs(child);
 				if (error != B_OK)
 					return error;
@@ -354,7 +354,7 @@ DiskDeviceJobGenerator::_GenerateChildPlacementJobs(BPartition* partition)
 	// their descendants
 	for (int32 i = 0; BPartition* child = partition->_ChildAt(i); i++) {
 		if (BMutablePartition* childShadow = _GetMutablePartition(child)) {
-			if (childShadow->Size() >= child->Size()) {
+			if (childShadow->Size() >= child->OriginalSize()) {
 				status_t error = _GeneratePlacementJobs(child);
 				if (error != B_OK)
 					return error;
@@ -371,13 +371,11 @@ status_t
 DiskDeviceJobGenerator::_GenerateRemainingJobs(BPartition* parent,
 	BPartition* partition)
 {
-	user_partition_data* partitionData = partition->fPartitionData;
-
 	uint32 changeFlags
 		= partition->fDelegate->MutablePartition()->ChangeFlags();
 
 	// create the partition, if not existing yet
-	if (!partitionData) {
+	if (!partition->fPartitionData) {
 		if (!parent)
 			return B_BAD_VALUE;
 
@@ -389,7 +387,7 @@ DiskDeviceJobGenerator::_GenerateRemainingJobs(BPartition* parent,
 
 		// name
 		if ((changeFlags & B_PARTITION_CHANGED_NAME)
-			|| compare_string(partition->Name(), partitionData->name)) {
+			|| compare_string(partition->Name(), partition->OriginalName())) {
 			if (!parent)
 				return B_BAD_VALUE;
 
@@ -400,7 +398,7 @@ DiskDeviceJobGenerator::_GenerateRemainingJobs(BPartition* parent,
 
 		// type
 		if ((changeFlags & B_PARTITION_CHANGED_TYPE)
-			|| compare_string(partition->Type(), partitionData->type)) {
+			|| compare_string(partition->Type(), partition->OriginalType())) {
 			if (!parent)
 				return B_BAD_VALUE;
 
@@ -412,7 +410,7 @@ DiskDeviceJobGenerator::_GenerateRemainingJobs(BPartition* parent,
 		// parameters
 		if ((changeFlags & B_PARTITION_CHANGED_PARAMETERS)
 			|| compare_string(partition->Parameters(),
-				partitionData->parameters)) {
+				partition->OriginalParameters())) {
 			if (!parent)
 				return B_BAD_VALUE;
 
@@ -434,7 +432,7 @@ DiskDeviceJobGenerator::_GenerateRemainingJobs(BPartition* parent,
 			// content name
 			if ((changeFlags & B_PARTITION_CHANGED_NAME)
 				|| compare_string(partition->ContentName(),
-					partitionData->content_name)) {
+					partition->OriginalContentName())) {
 				status_t error = _GenerateSetContentNameJob(partition);
 				if (error != B_OK)
 					return error;
@@ -443,7 +441,7 @@ DiskDeviceJobGenerator::_GenerateRemainingJobs(BPartition* parent,
 			// content parameters
 			if ((changeFlags & B_PARTITION_CHANGED_PARAMETERS)
 				|| compare_string(partition->ContentParameters(),
-					partitionData->content_parameters)) {
+					partition->OriginalContentParameters())) {
 				status_t error = _GenerateSetContentParametersJob(partition);
 				if (error != B_OK)
 					return error;
@@ -668,6 +666,9 @@ DiskDeviceJobGenerator::_GenerateResizeJob(BPartition* partition)
 	error = _GetPartitionReference(partition, reference);
 	if (error != B_OK)
 		return error;
+
+	TRACE("DiskDeviceJobGenerator::GenerateResizeJob() - 4\n");
+	TRACE("DiskDeviceJobGenerator::GenerateResizeJob() - 5\n");
 
 	return _AddJob(new(nothrow) ResizeJob(parentReference, reference,
 		partition->Size(), partition->ContentSize()));

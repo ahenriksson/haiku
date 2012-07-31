@@ -73,6 +73,23 @@ public:
 									const char* parameters = NULL);
 			status_t			Unmount(uint32 unmountFlags = 0);
 
+	// Information about the unmodified partition
+
+			off_t				OriginalOffset() const;
+			off_t				OriginalSize() const;
+			off_t				OriginalContentSize() const;
+			uint32				OriginalBlockSize() const;
+			int32				OriginalIndex() const;
+			uint32				OriginalStatus() const;
+
+			const char*			OriginalName() const;
+			const char*			OriginalContentName() const;
+			const char*			OriginalType() const;
+			const char*			OriginalContentType() const;
+			partition_id		OriginalID() const;
+			const char*			OriginalParameters() const;
+			const char*			OriginalContentParameters() const;
+
 	// Hierarchy Info
 
 			BDiskDevice*		Device() const;

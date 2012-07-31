@@ -642,6 +642,108 @@ BPartition::Unmount(uint32 unmountFlags)
 }
 
 
+// OriginalOffset
+off_t
+BPartition::OriginalOffset() const
+{
+	return fPartitionData->offset;
+}
+
+
+// OriginalSize
+off_t
+BPartition::OriginalSize() const
+{
+	return fPartitionData->size;
+}
+
+
+// OriginalContentSize
+off_t
+BPartition::OriginalContentSize() const
+{
+	return fPartitionData->content_size;
+}
+
+// OriginalBlockSize
+uint32
+BPartition::OriginalBlockSize() const
+{
+	return fPartitionData->block_size;
+}
+
+
+// OriginalIndex
+int32
+BPartition::OriginalIndex() const
+{
+	return fPartitionData->index;
+}
+
+
+// OriginalStatus
+uint32
+BPartition::OriginalStatus() const
+{
+	return fPartitionData->status;
+}
+
+// OriginalName
+const char*
+BPartition::OriginalName() const
+{
+	return fPartitionData->name;
+}
+
+
+// OriginalContentName
+const char*
+BPartition::OriginalContentName() const
+{
+	return fPartitionData->content_name;
+}
+
+
+// OriginalType
+const char*
+BPartition::OriginalType() const
+{
+	return fPartitionData->type;
+}
+
+
+// OriginalContentType
+const char*
+BPartition::OriginalContentType() const
+{
+	return fPartitionData->content_type;
+}
+
+
+// OriginalID
+int32
+BPartition::OriginalID() const
+{
+	return fPartitionData->id;
+}
+
+
+// OriginalParameters
+const char*
+BPartition::OriginalParameters() const
+{
+	return fPartitionData->parameters;
+}
+
+
+// OriginalContentParameters
+const char*
+BPartition::OriginalContentParameters() const
+{
+	return fPartitionData->content_parameters;
+}
+
+
 // Device
 /*!	\brief Returns the device this partition resides on.
 	\return The device this partition resides on.
