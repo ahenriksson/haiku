@@ -333,6 +333,8 @@ ResizeVisitor::_UpdateParent(Transaction& transaction, Inode* inode,
 	if (status != B_OK)
 		return status;
 
+	parent->WriteLockInTransaction(transaction);
+
 	// update inode id in parent
 	if (inode->IsAttributeDirectory()) {
 		parent->Attributes() = GetVolume()->ToBlockRun(newInodeID);
@@ -510,6 +512,8 @@ ResizeVisitor::_UpdateChildren(Transaction& transaction, Inode* inode,
 		status = childVnode.Get(&childInode);
 		if (status != B_OK)
 			return status;
+
+		childInode->WriteLockInTransaction(transaction);
 
 		childInode->Node().parent = GetVolume()->ToBlockRun(newInodeID);
 		childInode->WriteBack(transaction);

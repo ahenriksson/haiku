@@ -389,6 +389,8 @@ status_t
 Index::UpdateInode(Transaction& transaction, const uint8* key, uint16 length,
 	off_t oldInodeID, off_t newInodeID)
 {
+	Node()->WriteLockInTransaction(transaction);
+
 	// remove node and insert it with the new id (we can't use
 	// BPlusTree::Replace, as it doesn't handle trees where duplicates
 	// are allowed)
