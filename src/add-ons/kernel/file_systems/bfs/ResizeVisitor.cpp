@@ -385,6 +385,8 @@ ResizeVisitor::_UpdateAttributeDirectory(Transaction& transaction, Inode* inode,
 	if (status != B_OK)
 		return status;
 
+	attributeDirectory->WriteLockInTransaction(transaction);
+
 	attributeDirectory->Parent() = newInodeRun;
 	return attributeDirectory->WriteBack(transaction);
 }
