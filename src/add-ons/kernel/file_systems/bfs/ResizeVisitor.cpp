@@ -551,6 +551,15 @@ ResizeVisitor::_UpdateChildren(Transaction& transaction, Inode* inode,
 status_t
 ResizeVisitor::_UpdateSuperBlock(Inode* inode, off_t newInodeID)
 {
+	// we need to have our transaction written to disk before we can write
+	// the updated super block, otherwise we might end up with a dangling
+	// reference if something fails later on.
+	status_t status = GetVolume()->GetJournal(0)->FlushLogAndBlocks();
+	if (status != B_OK) {
+		FATAL(("Resize: Failed to flush log before updating super block!\n"));
+		return status;
+	}
+
 	MutexLocker locker(GetVolume()->Lock());
 	disk_super_block& superBlock = GetVolume()->SuperBlock();
 	
