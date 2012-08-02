@@ -84,14 +84,6 @@ main(int argc, char** argv)
 		return 1;
 	}
 
-	BDiskSystem diskSystem;
-	status = partition->GetDiskSystem(&diskSystem);
-	if (status != B_OK) {
-		fprintf(stderr, "%s: Failed to get disk system for partition: %s\n",
-			kProgramName, strerror(status));
-		return 1;
-	}
-
 	// Validate the requested size
 
 	off_t validatedSize = size;
