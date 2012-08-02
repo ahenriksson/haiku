@@ -73,10 +73,7 @@ public:
 								{ return (NumBlocks() + fBlockSize * 8 - 1)
 									/ (fBlockSize * 8); }
 
-			status_t		UpdateDeviceSize();
-			off_t			DeviceSize() const { return fDeviceSize; }
 			uint32			DeviceBlockSize() const { return fDeviceBlockSize; }
-
 			uint32			BlockSize() const { return fBlockSize; }
 			uint32			BlockShift() const { return fBlockShift; }
 			uint32			InodeSize() const
@@ -169,7 +166,6 @@ protected:
 			int				fDevice;
 			disk_super_block fSuperBlock;
 
-			off_t			fDeviceSize;
 			uint32			fDeviceBlockSize;
 			uint32			fBlockSize;
 			uint32			fBlockShift;

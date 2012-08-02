@@ -46,6 +46,8 @@ public:
 			int			Mode() const { return fMode; }
 			bool		IsReadOnly() const { return _IsReadOnly(fMode); }
 
+			status_t	GetSize(off_t* _size, uint32* _blockSize = NULL);
+
 private:
 	static	bool		_IsReadOnly(int mode)
 							{ return (mode & O_RWMASK) == O_RDONLY;}
@@ -151,6 +153,38 @@ void
 DeviceOpener::Keep()
 {
 	fDevice = -1;
+}
+
+
+/*!	Returns the size of the device in bytes. It uses B_GET_GEOMETRY
+	to compute the size, or fstat() if that failed.
+*/
+status_t
+DeviceOpener::GetSize(off_t* _size, uint32* _blockSize)
+{
+	device_geometry geometry;
+	if (ioctl(fDevice, B_GET_GEOMETRY, &geometry) < 0) {
+		// maybe it's just a file
+		struct stat stat;
+		if (fstat(fDevice, &stat) < 0)
+			return B_ERROR;
+
+		if (_size)
+			*_size = stat.st_size;
+		if (_blockSize)	// that shouldn't cause us any problems
+			*_blockSize = 512;
+
+		return B_OK;
+	}
+
+	if (_size) {
+		*_size = 1LL * geometry.head_count * geometry.cylinder_count
+			* geometry.sectors_per_track * geometry.bytes_per_sector;
+	}
+	if (_blockSize)
+		*_blockSize = geometry.bytes_per_sector;
+
+	return B_OK;
 }
 
 
@@ -328,11 +362,10 @@ Volume::Mount(const char* deviceName, uint32 flags)
 	fAllocationGroupShift = fSuperBlock.AllocationGroupShift();
 
 	// check if the device size is large enough to hold the file system
-	status_t status = UpdateDeviceSize();
-	if (status != B_OK)
-		RETURN_ERROR(status);
-	
-	if (fDeviceSize < (NumBlocks() << BlockShift()))
+	off_t diskSize;
+	if (opener.GetSize(&diskSize, &fDeviceBlockSize) != B_OK)
+		RETURN_ERROR(B_ERROR);
+	if (diskSize < (NumBlocks() << BlockShift()))
 		RETURN_ERROR(B_BAD_VALUE);
 
 	// set the current log pointers, so that journaling will work correctly
@@ -346,7 +379,7 @@ Volume::Mount(const char* deviceName, uint32 flags)
 	if (fJournal == NULL)
 		return B_NO_MEMORY;
 
-	status = fJournal->InitCheck();
+	status_t status = fJournal->InitCheck();
 	if (status < B_OK) {
 		FATAL(("could not initialize journal: %s!\n", strerror(status)));
 		return status;
@@ -438,34 +471,6 @@ status_t
 Volume::Sync()
 {
 	return fJournal->FlushLogAndBlocks();
-}
-
-
-/*!	Reads the size and block size of the device in bytes. It uses
-	B_GET_GEOMETRY to compute the size, or fstat() if that failed.
-*/
-status_t
-Volume::UpdateDeviceSize()
-{
-	device_geometry geometry;
-	if (ioctl(fDevice, B_GET_GEOMETRY, &geometry) < 0) {
-		// maybe it's just a file
-		struct stat stat;
-		if (fstat(fDevice, &stat) < 0)
-			return B_ERROR;
-
-		fDeviceSize = stat.st_size;
-		fDeviceBlockSize = 512;
-			// that shouldn't cause us any problems
-
-		return B_OK;
-	}
-
-	fDeviceSize = 1LL * geometry.head_count * geometry.cylinder_count
-		* geometry.sectors_per_track * geometry.bytes_per_sector;
-	fDeviceBlockSize = geometry.bytes_per_sector;
-
-	return B_OK;
 }
 
 
@@ -783,11 +788,12 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 
 	fDevice = opener.Device();
 
-	status_t status = UpdateDeviceSize();
-	if (status != B_OK)
-		return status;
+	uint32 deviceBlockSize;
+	off_t deviceSize;
+	if (opener.GetSize(&deviceSize, &deviceBlockSize) < B_OK)
+		return B_ERROR;
 
-	off_t numBlocks = fDeviceSize / blockSize;
+	off_t numBlocks = deviceSize / blockSize;
 
 	// create valid super block
 
@@ -798,7 +804,7 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 	fBlockShift = fSuperBlock.BlockShift();
 	fAllocationGroupShift = fSuperBlock.AllocationGroupShift();
 
-	off_t logSize = CalculateLogSize(numBlocks, fDeviceSize);
+	off_t logSize = CalculateLogSize(numBlocks, deviceSize);
 
 	// since the allocator has not been initialized yet, we
 	// cannot use BlockAllocator::BitmapSize() here
@@ -831,7 +837,7 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 		RETURN_ERROR(B_ERROR);
 
 	off_t id;
-	status = Inode::Create(transaction, NULL, NULL,
+	status_t status = Inode::Create(transaction, NULL, NULL,
 		S_DIRECTORY | 0755, 0, 0, NULL, &id, &fRootNode);
 	if (status < B_OK)
 		RETURN_ERROR(status);

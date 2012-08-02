@@ -262,15 +262,6 @@ ResizeVisitor::_IsResizePossible(off_t size)
 		return B_BAD_VALUE;
 	}
 
-	status_t status = GetVolume()->UpdateDeviceSize();
-	if (status != B_OK)
-		return status;
-
-	if (GetVolume()->DeviceSize() < size) {
-		FATAL(("Resize: Device too small for new size\n"));
-		return B_BAD_VALUE;
-	}
-
 	if (GetVolume()->UsedBlocks() > fNumBlocks) {
 		FATAL(("Resize: Not enough free space for resize!\n"));
 		return B_BAD_VALUE;
