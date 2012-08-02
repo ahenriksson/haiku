@@ -48,6 +48,9 @@ public:
 
 			void				VnodeDeleted()	{ fVnodeDeleted = true; }
 
+			void				SetVnodeID(ino_t id)
+									{ fInode = id; }
+
 protected:
 	virtual	void				DeleteObject();
 

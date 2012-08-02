@@ -3902,6 +3902,9 @@ change_vnode_id(fs_volume* volume, ino_t vnodeID, ino_t newID)
 	vnode->id = newID;
 	hash_insert(sVnodeTable, vnode);
 
+	if (vnode->cache)
+		((VMVnodeCache*)vnode->cache)->SetVnodeID(newID);
+
 	return B_OK;
 }
 
