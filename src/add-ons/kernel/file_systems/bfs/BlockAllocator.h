@@ -47,7 +47,8 @@ public:
 
 			status_t		AllocateBlocks(Transaction& transaction,
 								int32 group, uint16 start, uint16 numBlocks,
-								uint16 minimum, block_run& run);
+								uint16 minimum, block_run& run,
+								bool inode = false);
 
 			status_t		AllocateBlockRun(Transaction& transaction,
 								block_run run);

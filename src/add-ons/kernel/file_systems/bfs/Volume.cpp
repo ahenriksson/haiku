@@ -251,15 +251,20 @@ Volume::Volume(fs_volume* volume)
 	fDirtyCachedBlocks(0),
 	fFlags(0),
 	fCheckingThread(-1),
-	fCheckVisitor(NULL)
+	fCheckVisitor(NULL),
+	fMovedInodes(NULL)
 {
 	mutex_init(&fLock, "bfs volume");
 	mutex_init(&fQueryLock, "bfs queries");
+	rw_lock_init(&fMovedInodesLock, "bfs moved inodes");
 }
 
 
 Volume::~Volume()
 {
+	delete fMovedInodes;
+
+	rw_lock_destroy(&fMovedInodesLock);
 	mutex_destroy(&fQueryLock);
 	mutex_destroy(&fLock);
 }
@@ -507,6 +512,65 @@ Volume::CreateIndicesRoot(Transaction& transaction)
 
 	fSuperBlock.indices = ToBlockRun(id);
 	return WriteSuperBlock();
+}
+
+
+status_t
+Volume::AddMovedInode(ino_t oldID, ino_t newID)
+{
+	ASSERT_WRITE_LOCKED_RW_LOCK(&fMovedInodesLock);
+
+	if (fMovedInodes == NULL)
+		fMovedInodes = new(std::nothrow) InodeMap;
+
+	if (fMovedInodes == NULL)
+		return B_NO_MEMORY;
+
+	return fMovedInodes->Put(oldID, newID);
+}
+
+
+bool
+Volume::HasMovedInodes() const
+{
+	return fMovedInodes != NULL;
+}
+
+
+InodeMap::Iterator
+Volume::MovedInodesIterator() const
+{
+	ASSERT(fMovedInodes != NULL);
+	return fMovedInodes->GetIterator();
+}
+
+
+ino_t
+Volume::ResolveVnodeID(ino_t vnodeID)
+{
+	ReadLocker locker(fMovedInodesLock);
+
+	// no inodes have been moved
+	if (fMovedInodes == NULL)
+		return vnodeID;
+
+	ino_t* inodeID;
+
+	// has this inode been moved?
+	if (fMovedInodes->Get(vnodeID, inodeID))
+		return *inodeID;
+
+	return vnodeID;
+}
+
+
+bool
+Volume::WasMovedInode(ino_t blockNumber)
+{
+	ASSERT(fMovedInodes != NULL);
+	ReadLocker locker(fMovedInodesLock);
+
+	return fMovedInodes->ContainsKey(blockNumber);
 }
 
 

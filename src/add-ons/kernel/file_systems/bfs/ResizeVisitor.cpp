@@ -129,6 +129,8 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 	// start by moving the inode so we can place the stream close to it
 	// if possible
 	if (inodeBlock < fBeginBlock || inodeBlock >= fEndBlock) {
+		WriteLocker movedInodesLocker(GetVolume()->MovedInodesLock());
+
 		status = mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), true);
 
 		ino_t oldInodeID = inode->ID();
@@ -600,7 +602,7 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 
 	block_run run;
 	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction, 0, 0,
-		1, 1, run);
+		1, 1, run, true);
 		// TODO: use a hint, maybe old position % new volume size?
 		//       stuff that originally was in the beginning should probably
 		//       stay close to it
@@ -659,6 +661,12 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 			FATAL(("_MoveInode: Could not write super block!\n"));
 			return status;
 		}
+	}
+
+	status = GetVolume()->AddMovedInode(inode->ID(), newInodeID);
+	if (status != B_OK) {
+		FATAL(("_MoveInode: Could not add inode to vnodeID -> inodeID map!\n"));
+		return status;
 	}
 
 	return B_OK;

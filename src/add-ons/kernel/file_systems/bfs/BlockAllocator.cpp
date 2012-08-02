@@ -785,7 +785,7 @@ BlockAllocator::IsBlockRunOutsideRange(block_run run) const
 */
 status_t
 BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
-	uint16 start, uint16 maximum, uint16 minimum, block_run& run)
+	uint16 start, uint16 maximum, uint16 minimum, block_run& run, bool inode)
 {
 	if (maximum == 0)
 		return B_BAD_VALUE;
@@ -798,6 +798,16 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 
 	AllocationBlock cached(fVolume);
 	RecursiveLocker lock(fLock);
+
+	bool checkMovedInodes = false;
+	ReadLocker movedInodesLocker;
+	if (inode) {
+		movedInodesLocker.SetTo(fVolume->MovedInodesLock(), false);
+
+		// don't check for moved inodes unless the volume actually has them
+		if (fVolume->HasMovedInodes())
+			checkMovedInodes = true;
+	}
 
 	uint32 bitsPerFullBlock = fVolume->BlockSize() << 3;
 
@@ -854,7 +864,7 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 		if (start < group.fFirstFree)
 			start = group.fFirstFree;
 
-		if (group.fLargestValid) {
+		if (group.fLargestValid && !checkMovedInodes) {
 			if (group.fLargestLength < bestLength)
 				continue;
 
@@ -884,7 +894,8 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 		int32 groupLargestStart = -1;
 		int32 groupLargestLength = -1;
 		int32 currentBit = start;
-		bool canFindGroupLargest = start == 0 && end == group.NumBits();
+		bool canFindGroupLargest = start == 0 && end == group.NumBits()
+			&& !checkMovedInodes;
 
 		// If end is the first bit in a block, the last block considered is the
 		// previous one, and the end bit is bitsPerFullBlock.
@@ -908,7 +919,22 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 
 			// find a block large enough to hold the allocation
 			for (uint32 bit = start % bitsPerFullBlock; bit < endBit; bit++) {
-				if (!cached.IsUsed(bit)) {
+				bool isUsed = cached.IsUsed(bit);
+
+				// if we're allocating space for an inode, we treat blocks
+				// which used to have moved inodes as used
+				if (checkMovedInodes && !isUsed) {
+					ino_t currentBlock = fVolume->ToBlock(
+							block_run::Run(groupIndex, currentBit, 1));
+
+					// while it might seem excessive to do a hash lookup for
+					// every bit we check, an inode only requires a single
+					// block, so we're unlikely to do this more than once, or
+					// a couple of times at most
+					isUsed = fVolume->WasMovedInode(currentBlock);
+				}
+
+				if (!isUsed) {
 					if (currentLength == 0) {
 						// start new range
 						currentStart = currentBit;
@@ -1038,7 +1064,7 @@ BlockAllocator::AllocateForInode(Transaction& transaction,
 	if ((type & (S_DIRECTORY | S_INDEX_DIR | S_ATTR_DIR)) == S_DIRECTORY)
 		group += 8;
 
-	return AllocateBlocks(transaction, group, 0, 1, 1, run);
+	return AllocateBlocks(transaction, group, 0, 1, 1, run, true);
 }
 
 

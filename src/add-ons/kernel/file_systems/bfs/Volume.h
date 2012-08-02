@@ -29,6 +29,8 @@ enum volume_initialize_flags {
 
 typedef DoublyLinkedList<Inode> InodeList;
 
+typedef HashMap<HashKey64<ino_t>, ino_t> InodeMap;
+
 
 class Volume {
 public:
@@ -105,6 +107,15 @@ public:
 
 			InodeList&		RemovedInodes() { return fRemovedInodes; }
 				// This list is guarded by the transaction lock
+
+			// moved inodes
+			rw_lock&		MovedInodesLock() { return fMovedInodesLock; }
+			status_t		AddMovedInode(ino_t oldID, ino_t newID);
+			bool			HasMovedInodes() const;
+			InodeMap::Iterator MovedInodesIterator() const;
+
+			ino_t			ResolveVnodeID(ino_t vnodeID);
+			bool			WasMovedInode(ino_t blockNumber);
 
 			// block bitmap
 			BlockAllocator&	Allocator();
@@ -185,6 +196,9 @@ protected:
 			::CheckVisitor*	fCheckVisitor;
 
 			InodeList		fRemovedInodes;
+
+			rw_lock			fMovedInodesLock;
+			InodeMap*		fMovedInodes;
 };
 
 

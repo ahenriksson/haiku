@@ -269,11 +269,19 @@ bfs_sync(fs_volume* _volume)
 /*!	Reads in the node from disk and creates an inode object from it.
 */
 static status_t
-bfs_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
+bfs_get_vnode(fs_volume* _volume, ino_t _id, fs_vnode* _node, int* _type,
 	uint32* _flags, bool reenter)
 {
 	//FUNCTION_START(("ino_t = %Ld\n", id));
 	Volume* volume = (Volume*)_volume->private_volume;
+
+	ino_t id = volume->ResolveVnodeID(_id);
+	if (id != _id) {
+		// TODO: we return an error here for now
+		INFORM(("Denying access to remapped inode, old ID=%" B_PRIdINO
+			", new ID=%" B_PRIdINO "\n", _id, id));
+		return B_ERROR;
+	}
 
 	// first inode may be after the log area, we don't go through
 	// the hassle and try to load an earlier block from disk
