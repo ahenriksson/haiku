@@ -307,6 +307,11 @@ ResizeVisitor::_ResizeVolume()
 	if (status != B_OK)
 		return status;
 
+	// change size of block cache
+	status = GetVolume()->ResizeBlockCache(fNumBlocks);
+	if (status != B_OK)
+		return status;
+
 	// update superblock and volume information
 	disk_super_block& superBlock = GetVolume()->SuperBlock();
 
