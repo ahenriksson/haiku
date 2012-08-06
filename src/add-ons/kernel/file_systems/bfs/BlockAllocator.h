@@ -47,6 +47,9 @@ public:
 								uint16 minimum, block_run& run,
 								off_t beginBlock = 0, off_t endBlock = 0);
 
+			status_t		AllocateBlockRun(Transaction& transaction,
+								block_run run);
+
 			status_t		CheckBlocks(off_t start, off_t length,
 								bool allocated = true,
 								off_t* firstError = NULL);
