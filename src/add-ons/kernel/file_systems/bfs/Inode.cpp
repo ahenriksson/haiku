@@ -1833,13 +1833,13 @@ Inode::FillGapWithZeros(off_t pos, off_t newSize)
 */
 status_t
 Inode::_AllocateBlockArray(Transaction& transaction, block_run& run,
-	size_t length, bool variableSize, off_t beginBlock, off_t endBlock)
+	size_t length, bool variableSize)
 {
 	if (!run.IsZero())
 		return B_BAD_VALUE;
 
 	status_t status = fVolume->Allocate(transaction, this, length, run,
-		variableSize ? 1 : length, beginBlock, endBlock);
+		variableSize ? 1 : length);
 	if (status != B_OK)
 		return status;
 
@@ -1867,8 +1867,7 @@ Inode::_AllocateBlockArray(Transaction& transaction, block_run& run,
 */
 status_t
 Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
-	block_run run, off_t targetSize, int32* rest, off_t beginBlock,
-	off_t endBlock)
+	block_run run, off_t targetSize, int32* rest)
 {
 	status_t status;
 
@@ -1920,7 +1919,7 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
 		// if there is no indirect block yet, create one
 		if (dataStream->indirect.IsZero()) {
 			status = _AllocateBlockArray(transaction, dataStream->indirect,
-				NUM_ARRAY_BLOCKS, true, beginBlock, endBlock);
+				NUM_ARRAY_BLOCKS, true);
 			if (status != B_OK)
 				return status;
 
@@ -2001,7 +2000,7 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
 		if (dataStream->double_indirect.IsZero()) {
 			status = _AllocateBlockArray(transaction,
 				dataStream->double_indirect, _DoubleIndirectBlockLength(),
-				false, beginBlock, endBlock);
+				false);
 			if (status != B_OK)
 				return status;
 
@@ -2051,8 +2050,7 @@ Inode::_AddBlockRun(Transaction& transaction, data_stream* dataStream,
 
 					status = _AllocateBlockArray(transaction,
 						array[indirectIndex % runsPerBlock],
-						dataStream->double_indirect.Length(), false,
-						beginBlock, endBlock);
+						dataStream->double_indirect.Length(), false);
 					if (status != B_OK)
 						return status;
 				}
@@ -2669,8 +2667,7 @@ Inode::Sync()
 */
 status_t
 Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
-	data_stream* dataStream, off_t targetSize, bool flush, off_t beginBlock,
-	off_t endBlock)
+	data_stream* dataStream, off_t targetSize, bool flush)
 {
 	status_t status;
 	off_t doubleIndirectBlockLength = _DoubleIndirectBlockLength();
@@ -2696,8 +2693,7 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 			}
 
 			status = fVolume->Allocator().AllocateBlocks(transaction, 0, 0,
-					buffer.NumBlocks(), doubleIndirectBlockLength, run,
-					beginBlock, endBlock);
+					buffer.NumBlocks(), doubleIndirectBlockLength, run);
 			if (status != B_OK)
 				return status;
 
@@ -2710,7 +2706,7 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 				blocksToWrite = run.Length();
 		} else {
 			status = fVolume->Allocator().AllocateBlocks(transaction, 0, 0,
-				buffer.NumBlocks(), 1, run, beginBlock, endBlock);
+				buffer.NumBlocks(), 1, run);
 			if (status != B_OK)
 				return status;
 
@@ -2719,8 +2715,7 @@ Inode::_WriteBufferedRuns(Transaction& transaction, BlockRunBuffer& buffer,
 
 		// add the run to the data stream
 		int32 rest;
-		status = _AddBlockRun(transaction, dataStream, run, targetSize,
-			&rest, beginBlock, endBlock);
+		status = _AddBlockRun(transaction, dataStream, run, targetSize, &rest);
 		if (status != B_OK)
 			return status;
 
@@ -2831,30 +2826,11 @@ Inode::_GetNextBlockRun(off_t& position, block_run& run) const
 }
 
 
-bool
-Inode::_IsBlockRunInRange(block_run run, off_t beginBlock, off_t endBlock) const
-{
-	off_t runStart = GetVolume()->ToBlock(run);
-	return runStart >= beginBlock && runStart + run.Length() <= endBlock;
-}
-
-
-bool
-Inode::_IsBlockRunOutsideRange(block_run run, off_t beginBlock, off_t endBlock)
-	const
-{
-	// note that this is not the opposite of _IsBlockRunInRange, as we only
-	// return true if the block run is completely outside the range.
-	off_t runStart = GetVolume()->ToBlock(run);
-	return runStart + run.Length() <= beginBlock || runStart >= endBlock;
-}
-
-
-/*! Move the file stream to lie completely in the range from \a beginBlock
-	up to but not including \a endBlock.
+/*! Move the file stream to lie completely in the allocation range specified
+	in the block allocator.
 */
 status_t
-Inode::MoveStream(off_t beginBlock, off_t endBlock)
+Inode::MoveStream()
 {
 	// We move the stream by rebuilding it from scratch. block_runs which
 	// can be reused are simply added to the result stream (newStream) as
@@ -2884,6 +2860,8 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 	if (status != B_OK)
 		return status;
 
+	BlockAllocator& allocator = fVolume->Allocator();
+
 	Stack<block_run> runsToFree;
 		// no particular reason for using a stack, we just need something to
 		// store block_run's in
@@ -2902,9 +2880,9 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 		if (status != B_OK)
 			return status;
 
-		if (_IsBlockRunInRange(run, beginBlock, endBlock)) {
+		if (allocator.IsBlockRunInRange(run)) {
 			status = _WriteBufferedRuns(transaction, buffer, &newStream,
-				Size(), false, beginBlock, endBlock);
+				Size(), false);
 			if (status != B_OK)
 				return status;
 
@@ -2914,7 +2892,7 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 			if (buffer.IsEmpty()) {
 				int32 rest;
 				status = _AddBlockRun(transaction, &newStream, run, Size(),
-					&rest, beginBlock, endBlock);
+					&rest);
 				if (status != B_OK)
 					return status;
 
@@ -2931,13 +2909,13 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 		// We can't reuse this block_run, add it to the block_run buffer.
 		if (buffer.IsFull()) {
 			status = _WriteBufferedRuns(transaction, buffer, &newStream,
-				Size(), false, beginBlock, endBlock);
+				Size(), false);
 			if (status != B_OK)
 				return status;
 		}
 		buffer.PutRun(run);
 
-		if (_IsBlockRunOutsideRange(run, beginBlock, endBlock)) {
+		if (allocator.IsBlockRunOutsideRange(run)) {
 			// The block run was outside of the allowed range, which means
 			// that we can free it now without running the risk of
 			// reallocating it and overwriting its content.
@@ -2953,8 +2931,7 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 	}
 
 	// write all blocks remaining in the buffer to disk
-	status = _WriteBufferedRuns(transaction, buffer, &newStream, Size(), true,
-		beginBlock, endBlock);
+	status = _WriteBufferedRuns(transaction, buffer, &newStream, Size(), true);
 	if (status != B_OK)
 		return status;
 	
@@ -2979,25 +2956,27 @@ Inode::MoveStream(off_t beginBlock, off_t endBlock)
 }
 
 
-/*! Check if the file stream is in the range from \a beginBlock up to
-	but not including \endBlock.
+/*! Check if the file stream is in the allocation range specified in the
+	block allocator.
 */
 status_t
-Inode::StreamInRange(off_t beginBlock, off_t endBlock, bool& inRange) const
+Inode::StreamInRange(bool& inRange) const
 {
 	inRange = false;
 		// now we can simply return if we find a run which is not in the range
+
+	BlockAllocator& allocator = fVolume->Allocator();
 	
 	// check that the indirection blocks are in the allowed range
 	const data_stream* data = &fNode.data;
 
 	if (!data->indirect.IsZero()
-		&& !_IsBlockRunInRange(data->indirect, beginBlock, endBlock)) {
+		&& !allocator.IsBlockRunInRange(data->indirect)) {
 		return B_OK;
 	}
 
 	if (!data->double_indirect.IsZero()) {
-		if (!_IsBlockRunInRange(data->double_indirect, beginBlock, endBlock))
+		if (!allocator.IsBlockRunInRange(data->double_indirect))
 			return B_OK;
 
 		int32 runsPerBlock = fVolume->BlockSize() / sizeof(block_run);
@@ -3016,7 +2995,7 @@ Inode::StreamInRange(off_t beginBlock, off_t endBlock, bool& inRange) const
 					break;
 				}
 
-				if (!_IsBlockRunInRange(runArray[i], beginBlock, endBlock))
+				if (!allocator.IsBlockRunInRange(runArray[i]))
 					return B_OK;
 			}
 
@@ -3036,7 +3015,7 @@ Inode::StreamInRange(off_t beginBlock, off_t endBlock, bool& inRange) const
 		if (status != B_OK)
 			return status;
 
-		if (!_IsBlockRunInRange(run, beginBlock, endBlock))
+		if (!allocator.IsBlockRunInRange(run))
 			return B_OK;
 	}
 

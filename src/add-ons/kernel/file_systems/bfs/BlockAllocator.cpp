@@ -505,7 +505,9 @@ AllocationGroup::Free(Transaction& transaction, uint16 start, int32 length)
 BlockAllocator::BlockAllocator(Volume* volume)
 	:
 	fVolume(volume),
-	fGroups(NULL)
+	fGroups(NULL),
+	fBeginBlock(0),
+	fEndBlock(0)
 {
 	recursive_lock_init(&fLock, "bfs allocator");
 }
@@ -734,26 +736,61 @@ BlockAllocator::Uninitialize()
 }
 
 
-/*!	Tries to allocate between \a minimum, and \a maximum blocks in the range
-	from \a beginBlock up to but not including \a endBlock, starting at group
-	\a groupIndex with offset \a start. The resulting allocation is put into
-	\a run.
+/*! Specifies the range in which blocks will be allocated, starting from
+	\a beginBlock, up to but not including \a endBlock.
 
-	An \a endBlock value of 0 means no upper limit on the allowed allocation
-	range.
+	\a beginBlock and \a endBlock values of 0 means that no limits on the
+	allowed allocation range are imposed.
+*/
+void
+BlockAllocator::SetRange(off_t beginBlock, off_t endBlock)
+{
+	RecursiveLocker lock(fLock);
+
+	fBeginBlock = beginBlock;
+	fEndBlock = endBlock;
+}
+
+
+bool
+BlockAllocator::IsBlockRunInRange(block_run run) const
+{
+	if (fBeginBlock == 0 && fEndBlock == 0)
+		return true;
+
+	off_t runStart = fVolume->ToBlock(run);
+	return runStart >= fBeginBlock && runStart + run.Length() <= fEndBlock;
+}
+
+
+bool
+BlockAllocator::IsBlockRunOutsideRange(block_run run) const
+{
+	if (fBeginBlock == 0 && fEndBlock == 0)
+		return false;
+
+	// note that this is not the opposite of _IsBlockRunInRange, as we only
+	// return true if the block run is completely outside the range.
+	off_t runStart = fVolume->ToBlock(run);
+	return runStart + run.Length() <= fBeginBlock || runStart >= fEndBlock;
+}
+
+
+/*!	Tries to allocate between \a minimum, and \a maximum blocks, starting at
+	group \a groupIndex with offset \a start. The resulting allocation is put
+	into \a run.
 
 	The number of allocated blocks is always a multiple of \a minimum which
 	has to be a power of two value.
 */
 status_t
 BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
-	uint16 start, uint16 maximum, uint16 minimum, block_run& run,
-	off_t beginBlock, off_t endBlock)
+	uint16 start, uint16 maximum, uint16 minimum, block_run& run)
 {
 	if (maximum == 0)
 		return B_BAD_VALUE;
 
-	if (endBlock > fVolume->NumBlocks())
+	if (fEndBlock > fVolume->NumBlocks())
 		return B_BAD_VALUE;
 
 	FUNCTION_START(("group = %ld, start = %u, maximum = %u, minimum = %u\n",
@@ -766,21 +803,21 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 
 	// Express the allowed allocation range in terms of allocation groups and
 	// offsets.
-	int32 firstAllowedGroup = beginBlock / bitsPerFullBlock;
-	uint16 firstGroupBegin = beginBlock % bitsPerFullBlock;
+	int32 firstAllowedGroup = fBeginBlock / bitsPerFullBlock;
+	uint16 firstGroupBegin = fBeginBlock % bitsPerFullBlock;
 
 	int32 lastAllowedGroup;
 	int32 lastGroupEnd;
 
-	if (endBlock == 0) {
+	if (fEndBlock == 0) {
 		lastAllowedGroup = fNumGroups - 1;
 		lastGroupEnd = fGroups[lastAllowedGroup].NumBits();
 	} else {
-		// If endBlock is the first block of an allocation group, the last
+		// If fEndBlock is the first block of an allocation group, the last
 		// allowed group is the previous, and the end block offset is
 		// bitsPerFullBlock.
-		lastAllowedGroup = (endBlock - 1) / bitsPerFullBlock;
-		lastGroupEnd = endBlock % bitsPerFullBlock;
+		lastAllowedGroup = (fEndBlock - 1) / bitsPerFullBlock;
+		lastGroupEnd = fEndBlock % bitsPerFullBlock;
 		if (lastGroupEnd == 0)
 			lastGroupEnd = bitsPerFullBlock;
 	}
@@ -965,8 +1002,8 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 	run.start = HOST_ENDIAN_TO_BFS_INT16(bestStart);
 	run.length = HOST_ENDIAN_TO_BFS_INT16(bestLength);
 
-	ASSERT(fVolume->ToBlock(run) >= beginBlock);
-	ASSERT(endBlock == 0 || fVolume->ToBlock(run) + run.Length() <= endBlock);
+	ASSERT(fVolume->ToBlock(run) >= fBeginBlock);
+	ASSERT(fEndBlock == 0 || fVolume->ToBlock(run) + run.Length() <= fEndBlock);
 
 	fVolume->SuperBlock().used_blocks
 		= HOST_ENDIAN_TO_BFS_INT64(fVolume->UsedBlocks() + bestLength);
@@ -1007,8 +1044,7 @@ BlockAllocator::AllocateForInode(Transaction& transaction,
 
 status_t
 BlockAllocator::Allocate(Transaction& transaction, Inode* inode,
-	off_t numBlocks, block_run& run, uint16 minimum, off_t beginBlock,
-	off_t endBlock)
+	off_t numBlocks, block_run& run, uint16 minimum)
 {
 	if (numBlocks <= 0)
 		return B_ERROR;
@@ -1061,12 +1097,12 @@ BlockAllocator::Allocate(Transaction& transaction, Inode* inode,
 		group = inode->BlockRun().AllocationGroup() + 1;
 	}
 
-	return AllocateBlocks(transaction, group, start, numBlocks, minimum, run,
-		beginBlock, endBlock);
+	return AllocateBlocks(transaction, group, start, numBlocks, minimum, run);
 }
 
 
-/*!	Attempts to allocate a specific block run. 
+/*!	Attempts to allocate a specific block run.
+	Does not check if the block run is within the current allocation range.
 */
 status_t
 BlockAllocator::AllocateBlockRun(Transaction& transaction, block_run run)
@@ -1075,9 +1111,6 @@ BlockAllocator::AllocateBlockRun(Transaction& transaction, block_run run)
 
 	if (run.AllocationGroup() >= fNumGroups)
 		return B_BAD_VALUE;
-
-	if (!IsBlockRunInRange(run))
-		return B_DEVICE_FULL;
 
 	uint32 bitsPerBlock = fVolume->BlockSize() << 3;
 

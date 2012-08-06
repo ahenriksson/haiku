@@ -33,19 +33,21 @@ public:
 
 			void			Uninitialize();
 
+			void			SetRange(off_t beginBlock, off_t endBlock);
+			bool			IsBlockRunInRange(block_run run) const;
+			bool			IsBlockRunOutsideRange(block_run run) const;
+
 			status_t		AllocateForInode(Transaction& transaction,
 								const block_run* parent, mode_t type,
 								block_run& run);
 			status_t		Allocate(Transaction& transaction, Inode* inode,
 								off_t numBlocks, block_run& run,
-								uint16 minimum = 1, off_t beginBlock = 0,
-								off_t endBlock = 0);
+								uint16 minimum = 1);
 			status_t		Free(Transaction& transaction, block_run run);
 
 			status_t		AllocateBlocks(Transaction& transaction,
 								int32 group, uint16 start, uint16 numBlocks,
-								uint16 minimum, block_run& run,
-								off_t beginBlock = 0, off_t endBlock = 0);
+								uint16 minimum, block_run& run);
 
 			status_t		AllocateBlockRun(Transaction& transaction,
 								block_run run);
@@ -80,6 +82,9 @@ private:
 			int32			fNumGroups;
 			uint32			fBlocksPerGroup;
 			uint32			fNumBlocks;
+
+			off_t			fBeginBlock;
+			off_t			fEndBlock;
 };
 
 #ifdef BFS_DEBUGGER_COMMANDS

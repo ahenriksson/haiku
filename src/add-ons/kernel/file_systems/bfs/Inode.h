@@ -153,9 +153,8 @@ public:
 			status_t			TrimPreallocation(Transaction& transaction);
 			bool				NeedsTrimming() const;
 
-			status_t			MoveStream(off_t beginBlock, off_t endBlock);
-			status_t			StreamInRange(off_t beginBlock, off_t endBlock,
-									bool& inRange) const;
+			status_t			MoveStream();
+			status_t			StreamInRange(bool& inRange) const;
 
 			status_t			Free(Transaction& transaction);
 			status_t			Sync();
@@ -251,32 +250,25 @@ private:
 									off_t size, off_t& offset, off_t& max);
 			status_t			_AllocateBlockArray(Transaction& transaction,
 									block_run& run, size_t length,
-									bool variableSize = false,
-									off_t beginBlock = 0, off_t endBlock = 0);
+									bool variableSize = false);
 			status_t			_GrowStream(Transaction& transaction,
 									off_t size);
 			status_t			_ShrinkStream(Transaction& transaction,
 									off_t size);
 			status_t			_AddBlockRun(Transaction& transaction,
 									data_stream* dataStream, block_run run,
-									off_t targetSize, int32* rest = NULL,
-									off_t beginBlock = 0, off_t endBlock = 0);
+									off_t targetSize, int32* rest = NULL);
 
 			// moving the data stream
 			status_t			_WriteBufferedRuns(Transaction& transaction,
 									BlockRunBuffer& buffer,
 									data_stream* dataStream, off_t targetSize,
-									bool flush = false, off_t beginBlock = 0,
-									off_t endBlock = 0);
+									bool flush = false);
 			status_t			_FreeIndirectBlocks(Transaction& transaction,
 									data_stream *dataStream);
 
 			status_t			_GetNextBlockRun(off_t& position,
 									block_run& run) const;
-			bool				_IsBlockRunInRange(block_run run,
-									off_t beginBlock, off_t endBlock) const;
-			bool				_IsBlockRunOutsideRange(block_run run,
-									off_t beginBlock, off_t endBlock) const;
 
 private:
 			rw_lock				fLock;

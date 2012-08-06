@@ -22,6 +22,13 @@ ResizeVisitor::ResizeVisitor(Volume* volume)
 }
 
 
+ResizeVisitor::~ResizeVisitor()
+{
+	// reset the allocation range
+	GetVolume()->Allocator().SetRange(0, 0);
+}
+
+
 status_t
 ResizeVisitor::Resize(off_t size, disk_job_id job)
 {
@@ -49,6 +56,9 @@ ResizeVisitor::Resize(off_t size, disk_job_id job)
 
 	Start(VISIT_REGULAR | VISIT_INDICES | VISIT_REMOVED
 		| VISIT_ATTRIBUTE_DIRECTORIES);
+
+	GetVolume()->Allocator().SetRange(fBeginBlock, fEndBlock);
+		// this is reset in our destructor
 
 	// move file system data out of the way
 	while (true) {
@@ -151,7 +161,7 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 
 	// move the stream if necessary
 	bool inRange;
-	status = inode->StreamInRange(fBeginBlock, fEndBlock, inRange);
+	status = inode->StreamInRange(inRange);
 	if (status != B_OK) {
 		FATAL(("Resize: Failed to check file stream, inode %" B_PRIdINO
 			", \"%s\"!\n", inode->ID(), name));
@@ -160,7 +170,7 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 	}
 
 	if (!inRange) {
-		status = inode->MoveStream(fBeginBlock, fEndBlock);
+		status = inode->MoveStream();
 		if (status != B_OK) {
 			FATAL(("Resize: Failed to move file stream, inode %" B_PRIdINO
 				", \"%s\"!\n", inode->ID(), name));
@@ -590,7 +600,7 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 
 	block_run run;
 	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction, 0, 0,
-		1, 1, run, fBeginBlock, fEndBlock);
+		1, 1, run);
 		// TODO: use a hint, maybe old position % new volume size?
 		//       stuff that originally was in the beginning should probably
 		//       stay close to it
