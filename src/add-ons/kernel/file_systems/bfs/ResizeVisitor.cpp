@@ -640,7 +640,10 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 			RETURN_ERROR(status);
 	}
 
-	if (inode->IsDirectory() || inode->IsAttributeDirectory()) {
+	// update the parent reference if we have children, this applies to
+	// regular directories, attribute directories and the index directory
+	// (not the indices themselves though)
+	if (inode->IsContainer() && !inode->IsIndex()) {
 		status = _UpdateChildren(transaction, inode, newInodeID);
 		if (status != B_OK)
 			RETURN_ERROR(status);
