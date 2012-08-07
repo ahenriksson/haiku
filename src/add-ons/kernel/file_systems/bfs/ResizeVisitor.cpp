@@ -129,8 +129,6 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 	// start by moving the inode so we can place the stream close to it
 	// if possible
 	if (inodeBlock < fBeginBlock || inodeBlock >= fEndBlock) {
-		WriteLocker movedInodesLocker(GetVolume()->MovedInodesLock());
-
 		status = mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), true);
 
 		ino_t oldInodeID = inode->ID();
@@ -659,6 +657,7 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 		}
 	}
 
+	WriteLocker movedInodesLocker(GetVolume()->MovedInodesLock());
 	status = GetVolume()->AddMovedInode(inode->ID(), newInodeID);
 	if (status != B_OK) {
 		FATAL(("_MoveInode: Could not add inode to vnodeID -> inodeID map!\n"));
