@@ -607,52 +607,52 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 		//       stuff that originally was in the beginning should probably
 		//       stay close to it
 	if (status != B_OK)
-		return status;
+		RETURN_ERROR(status);
 
 	newInodeID = GetVolume()->ToBlock(run);
 
 	status = inode->Copy(transaction, newInodeID);
 	if (status != B_OK)
-		return status;
+		RETURN_ERROR(status);
 
 	if (!rootOrIndexDir) {
 		status = _UpdateParent(transaction, inode, newInodeID, treeName);
 		if (status != B_OK)
-			return status;
+			RETURN_ERROR(status);
 	}
 
 	// update parent reference in attribute directory if we have one
 	if (!inode->Attributes().IsZero()) {
 		status = _UpdateAttributeDirectory(transaction, inode, run);
 		if (status != B_OK)
-			return status;
+			RETURN_ERROR(status);
 	}
 
 	status = _UpdateIndexReferences(transaction, inode, newInodeID,
 		rootOrIndexDir);
 	if (status != B_OK)
-		return status;
+		RETURN_ERROR(status);
 
 	// update "." and ".." tree entries if we are a directory
 	if (inode->IsDirectory()) {
 		status = _UpdateTree(transaction, inode, newInodeID);
 		if (status != B_OK)
-			return status;
+			RETURN_ERROR(status);
 	}
 
 	if (inode->IsDirectory() || inode->IsAttributeDirectory()) {
 		status = _UpdateChildren(transaction, inode, newInodeID);
 		if (status != B_OK)
-			return status;
+			RETURN_ERROR(status);
 	}
 
 	status = GetVolume()->Free(transaction, inode->BlockRun());
 	if (status != B_OK)
-		return status;
+		RETURN_ERROR(status);
 
 	status = transaction.Done();
 	if (status != B_OK)
-		return status;
+		RETURN_ERROR(status);
 
 	if (rootOrIndexDir) {
 		status = _UpdateSuperBlock(inode, newInodeID);
