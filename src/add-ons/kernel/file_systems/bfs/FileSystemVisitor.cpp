@@ -59,7 +59,15 @@ FileSystemVisitor::Next()
 			// open inode
 			vnode.SetTo(fVolume, fCurrent);
 			status = vnode.Get(&inode);
+
+			// release the reference we acquired when pushing the node to
+			// the stack
+			put_vnode(fVolume->FSVolume(), fVolume->ToVnode(fCurrent));
+
 			if (status != B_OK) {
+				if (inode->IsDeleted())
+					continue;
+
 				status = OpenInodeFailed(status, fVolume->ToBlock(fCurrent),
 					NULL, NULL, NULL);
 				if (status == B_OK)
@@ -140,6 +148,10 @@ FileSystemVisitor::Next()
 				// push the directory on the stack, it will be visited after
 				// its children
 				fStack.Push(inode->BlockRun());
+
+				// the inode may be deleted behind our back, we keep a
+				// reference so we can check for this
+				vnode.Keep();
 				continue;
 			}
 
@@ -187,17 +199,25 @@ FileSystemVisitor::Start(uint32 flags)
 
 	fFlags = flags;
 
-	if (fFlags & VISIT_REGULAR)
+	if (fFlags & VISIT_REGULAR) {
+		Vnode vnode(fVolume, fVolume->Root());
+		vnode.Keep();
 		fStack.Push(fVolume->Root());
+	}
 
-	if (fFlags & VISIT_INDICES)
+	if (fFlags & VISIT_INDICES) {
+		Vnode vnode(fVolume, fVolume->Indices());
+		vnode.Keep();
 		fStack.Push(fVolume->Indices());
+	}
 
 	if (fFlags & VISIT_REMOVED) {
 		// Put removed vnodes to the stack -- they are not reachable by
 		// traversing the file system anymore.
 		InodeList::Iterator iterator = fVolume->RemovedInodes().GetIterator();
 		while (Inode* inode = iterator.Next()) {
+			Vnode vnode(fVolume, inode->ID());
+			vnode.Keep();
 			fStack.Push(inode->BlockRun());
 		}
 	}
@@ -216,6 +236,11 @@ FileSystemVisitor::Stop()
 		// the current directory inode is still locked in memory
 		put_vnode(fVolume->FSVolume(), fVolume->ToVnode(fCurrent));
 	}
+
+	// release the references to the vnodes on the stack
+	block_run run;
+	while (fStack.Pop(&run))
+		put_vnode(fVolume->FSVolume(), fVolume->ToVnode(run));
 }
 
 
