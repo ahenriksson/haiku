@@ -42,6 +42,7 @@
 #include "fssh_types.h"
 
 #include "DoublyLinkedList.h"
+#include "HashMap.h"
 #include "SinglyLinkedList.h"
 #include "Stack.h"
 
