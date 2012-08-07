@@ -310,6 +310,12 @@ ResizeVisitor::_ResizeVolume()
 	if (status != B_OK)
 		return status;
 
+	// we flush the log before updating file system size, so nothing
+	// on the disk remains unmoved 
+	status = GetVolume()->GetJournal(0)->FlushLogAndBlocks();
+	if (status != B_OK)
+		return status;
+
 	// update superblock and volume information
 	disk_super_block& superBlock = GetVolume()->SuperBlock();
 
