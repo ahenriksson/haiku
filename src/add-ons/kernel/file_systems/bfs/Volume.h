@@ -18,6 +18,8 @@ class Inode;
 class Query;
 class ResizeVisitor;
 
+struct InodeMapDefinitions;
+
 
 enum volume_flags {
 	VOLUME_READ_ONLY	= 0x0001
@@ -29,7 +31,7 @@ enum volume_initialize_flags {
 
 typedef DoublyLinkedList<Inode> InodeList;
 
-typedef HashMap<HashKey64<ino_t>, ino_t> InodeMap;
+typedef BOpenHashTable<InodeMapDefinitions> InodeMap;
 
 
 class Volume {
@@ -109,7 +111,7 @@ public:
 			rw_lock&		MovedInodesLock() { return fMovedInodesLock; }
 			status_t		AddMovedInode(ino_t oldID, ino_t newID);
 			bool			HasMovedInodes() const;
-			InodeMap::Iterator MovedInodesIterator() const;
+			void			FreeMovedInodes();
 
 			ino_t			ResolveVnodeID(ino_t vnodeID);
 			bool			WasMovedInode(ino_t blockNumber);
