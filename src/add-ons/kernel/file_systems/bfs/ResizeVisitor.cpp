@@ -143,8 +143,17 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 			return status;
 		}
 
+		// temporary ugliness
+		char realNameBuffer[B_FILE_NAME_LENGTH];
+		const char* realName = realNameBuffer;
+		if (inode->GetName(realNameBuffer) < B_OK)
+			realName = NULL;
+
+		ino_t parentDir = GetVolume()->ToBlock(inode->Parent());
+			// will be ignored if realName == NULL
+
 		status = change_vnode_id(GetVolume()->FSVolume(), oldInodeID,
-			newInodeID);
+			newInodeID, parentDir, realName);
 		if (status != B_OK) {
 			mark_vnode_busy(GetVolume()->FSVolume(), inode->ID(), false);
 			FATAL(("Resize: Failed to change ID in vnode, inode %" B_PRIdINO
