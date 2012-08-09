@@ -57,6 +57,8 @@ public:
 									{ return is_directory(Mode()); }
 			bool				IsIndex() const
 									{ return is_index(Mode()); }
+			bool				IsIndexRoot() const
+									{ return is_index_root(Mode()); }
 
 			bool				IsAttributeDirectory() const
 									{ return (Mode() & S_EXTENDED_TYPES)

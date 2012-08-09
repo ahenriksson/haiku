@@ -165,6 +165,34 @@ FileSystemVisitor::Next()
 			fStack.Push(inode->Attributes());
 		}
 
+		// the index root is not managed by the vnode layer, so we set
+		// 'inode' to point to the correct object
+		if (inode->IsIndexRoot()) {
+			bool error = false;
+
+			if (fVolume->IndicesNode() == NULL) {
+				FATAL(("Inode claimed to be index root, but the volume does "
+					"not have indices!\n"));
+				kernel_debugger("no indices");
+				error = true;
+			} else if (inode->ID() != fVolume->IndicesNode()->ID()) {
+				FATAL(("Index root inode did not match volume index root!\n"));
+				kernel_debugger("no match");
+				error = true;
+			}
+
+			if (error) {
+				status = OpenInodeFailed(B_ERROR, inode->ID(), NULL, NULL,
+					NULL);
+				if (status == B_OK)
+					continue;
+
+				return status;
+			}
+
+			inode = fVolume->IndicesNode();
+		}
+
 		bool visitingCurrentDirectory = inode->BlockRun() == fCurrent;
 
 		status = VisitInode(inode, name);
