@@ -363,7 +363,8 @@ extern fssh_status_t fssh_get_vnode_removed(fssh_fs_volume *volume,
 extern fssh_status_t fssh_mark_vnode_busy(fssh_fs_volume* volume,
 				fssh_vnode_id vnodeID, bool busy);
 extern fssh_status_t fssh_change_vnode_id(fssh_fs_volume* volume,
-				fssh_vnode_id vnodeID, fssh_vnode_id newID);
+				fssh_vnode_id vnodeID, fssh_vnode_id newID,
+				fssh_vnode_id dirID, const char* name);
 extern fssh_fs_volume* fssh_volume_for_vnode(fssh_fs_vnode *vnode);
 
 

@@ -2144,7 +2144,7 @@ fssh_mark_vnode_busy(fssh_fs_volume* volume, fssh_vnode_id vnodeID, bool busy)
 
 extern "C" fssh_status_t
 fssh_change_vnode_id(fssh_fs_volume* volume, fssh_vnode_id vnodeID,
-	fssh_vnode_id newID)
+	fssh_vnode_id newID, fssh_vnode_id /*dirID*/, const char* /*name*/)
 {
 	fssh_mutex_lock(&sVnodeMutex);
 	
