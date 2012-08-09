@@ -121,8 +121,6 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 	} else
 		strcpy(name, treeName);
 
-	WriteLocker writeLocker(inode->Lock());
-
 	status_t status;
 	off_t inodeBlock = inode->BlockNumber();
 
@@ -623,6 +621,7 @@ status_t
 ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 {
 	Transaction transaction(GetVolume(), 0);
+	inode->WriteLockInTransaction(transaction);
 
 	bool rootOrIndexDir = inode->BlockRun() == inode->Parent();
 
