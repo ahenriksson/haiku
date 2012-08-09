@@ -49,6 +49,7 @@ public:
 	virtual status_t PublishDevice();
 	virtual status_t UnpublishDevice();
 	virtual status_t RepublishDevice();
+	virtual status_t ResizeDevice(off_t size);
 	bool IsPublished() const;
 
 	void SetBusy(bool busy);

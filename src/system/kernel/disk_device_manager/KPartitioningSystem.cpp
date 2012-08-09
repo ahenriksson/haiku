@@ -152,14 +152,28 @@ KPartitioningSystem::Resize(KPartition* partition, off_t size, disk_job_id job)
 	if (!fModule->resize)
 		return B_NOT_SUPPORTED;
 
+	status_t result;
+	bool growing = size > partition->Size();
+
+	// resize device first if growing
+	if (growing) {
+		result = partition->ResizeDevice(size);
+		if (result != B_OK)
+			return result;
+	}
+
 	// open partition device
 	int fd = -1;
-	status_t result = partition->Open(O_RDWR, &fd);
+	result = partition->Open(O_RDWR, &fd);
 	if (result != B_OK)
 		return result;
 
 	// let the module do its job
 	result = fModule->resize(fd, partition->ID(), size, job);
+
+	// resize device last if shrinking
+	if (result == B_OK && !growing)
+		result = partition->ResizeDevice(size);
 
 	// cleanup and return
 	close(fd);
@@ -178,14 +192,28 @@ KPartitioningSystem::ResizeChild(KPartition* child, off_t size, disk_job_id job)
 	if (!fModule->resize_child)
 		return B_NOT_SUPPORTED;
 
+	status_t result;
+	bool growing = size > child->Size();
+
+	// resize device first if growing
+	if (growing) {
+		result = child->ResizeDevice(size);
+		if (result != B_OK)
+			return result;
+	}
+
 	// open partition device
 	int fd = -1;
-	status_t result = child->Parent()->Open(O_RDWR, &fd);
+	result = child->Parent()->Open(O_RDWR, &fd);
 	if (result != B_OK)
 		return result;
 
 	// let the module do its job
 	result = fModule->resize_child(fd, child->ID(), size, job);
+
+	// resize device last if shrinking
+	if (result == B_OK && !growing)
+		result = child->ResizeDevice(size);
 
 	// cleanup and return
 	close(fd);

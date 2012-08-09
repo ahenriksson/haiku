@@ -296,6 +296,32 @@ KPartition::RepublishDevice()
 }
 
 
+status_t
+KPartition::ResizeDevice(off_t size)
+{
+	if (!fPublishedName)
+		return B_OK;
+
+	// get the path
+	KPath path;
+	status_t error = GetPath(&path);
+	if (error != B_OK) {
+		dprintf("KPartition::ResizeDevice(): Failed to get path for "
+			"partition %ld: %s\n", ID(), strerror(error));
+		return error;
+	}
+
+	error = devfs_resize_partition(path.Path(), size);
+	if (error != B_OK) {
+		dprintf("KPartition::ResizeDevice(): Failed to resize partition "
+			"%ld: %s\n", ID(), strerror(error));
+		return error;
+	}
+
+	return B_OK;
+}
+
+
 bool
 KPartition::IsPublished() const
 {

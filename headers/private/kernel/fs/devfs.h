@@ -23,6 +23,7 @@ status_t devfs_unpublish_partition(const char* path);
 status_t devfs_publish_partition(const char* name, const partition_info* info);
 status_t devfs_rename_partition(const char* devicePath, const char* oldName,
 	const char* newName);
+status_t devfs_resize_partition(const char* path, off_t size);
 
 status_t devfs_unpublish_device(const char* path, bool disconnect);
 status_t devfs_publish_device(const char* path, device_hooks* calls);

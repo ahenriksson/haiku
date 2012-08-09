@@ -2152,6 +2152,21 @@ devfs_rename_partition(const char* devicePath, const char* oldName,
 
 
 extern "C" status_t
+devfs_resize_partition(const char* path, off_t size)
+{
+	devfs_vnode* device;
+	status_t status = get_node_for_path(sDeviceFileSystem, path, &device);
+	if (status != B_OK)
+		return status;
+
+	device->stream.u.dev.partition->info.size = size;
+	notify_stat_changed(sDeviceFileSystem->id, device->parent->id, B_STAT_SIZE);
+
+	return B_OK;
+}
+
+
+extern "C" status_t
 devfs_publish_directory(const char* path)
 {
 	RecursiveLocker locker(&sDeviceFileSystem->lock);
