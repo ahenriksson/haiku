@@ -641,7 +641,7 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
-	if (!rootOrIndexDir) {
+	if (!rootOrIndexDir && !inode->IsDeleted()) {
 		status = _UpdateParent(transaction, inode, newInodeID, treeName);
 		if (status != B_OK)
 			RETURN_ERROR(status);
@@ -654,10 +654,12 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 			RETURN_ERROR(status);
 	}
 
-	status = _UpdateIndexReferences(transaction, inode, newInodeID,
-		rootOrIndexDir);
-	if (status != B_OK)
-		RETURN_ERROR(status);
+	if (!inode->IsDeleted()) {
+		status = _UpdateIndexReferences(transaction, inode, newInodeID,
+			rootOrIndexDir);
+		if (status != B_OK)
+			RETURN_ERROR(status);
+	}
 
 	// update "." and ".." tree entries if we are a directory
 	if (inode->IsDirectory()) {
