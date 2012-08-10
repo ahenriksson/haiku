@@ -625,12 +625,12 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 
 	bool rootOrIndexDir = inode->BlockRun() == inode->Parent();
 
+	block_run hintRun = GetVolume()->ToBlockRun(inode->ID() % fNumBlocks);
+		// TODO: this allocation hint could certainly be improved
+
 	block_run run;
-	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction, 0, 0,
-		1, 1, run, true);
-		// TODO: use a hint, maybe old position % new volume size?
-		//       stuff that originally was in the beginning should probably
-		//       stay close to it
+	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction,
+		hintRun.AllocationGroup(), hintRun.Start(), 1, 1, run, true);
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
