@@ -444,7 +444,7 @@ Volume::Mount(const char* deviceName, uint32 flags)
 		return B_NO_MEMORY;
 
 	status_t status = fJournal->InitCheck();
-	if (status < B_OK) {
+	if (status != B_OK) {
 		FATAL(("could not initialize journal: %s!\n", strerror(status)));
 		return status;
 	}
@@ -480,7 +480,7 @@ Volume::Mount(const char* deviceName, uint32 flags)
 			}
 
 			if (fIndicesNode == NULL
-				|| fIndicesNode->InitCheck() < B_OK
+				|| fIndicesNode->InitCheck() != B_OK
 				|| !fIndicesNode->IsContainer()) {
 				INFORM(("bfs: volume doesn't have indices!\n"));
 
@@ -601,7 +601,7 @@ Volume::CreateIndicesRoot(Transaction& transaction)
 	status_t status = Inode::Create(transaction, NULL, NULL,
 		S_INDEX_DIR | S_STR_INDEX | S_DIRECTORY | 0700, 0, 0, NULL, &id,
 		&fIndicesNode);
-	if (status < B_OK)
+	if (status != B_OK)
 		RETURN_ERROR(status);
 
 	fSuperBlock.indices = ToBlockRun(id);
@@ -924,20 +924,20 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 		return B_ERROR;
 
 	fJournal = new(std::nothrow) Journal(this);
-	if (fJournal == NULL || fJournal->InitCheck() < B_OK)
+	if (fJournal == NULL || fJournal->InitCheck() != B_OK)
 		RETURN_ERROR(B_ERROR);
 
 	// ready to write data to disk
 
 	Transaction transaction(this, 0);
 
-	if (fBlockAllocator.InitializeAndClearBitmap(transaction) < B_OK)
+	if (fBlockAllocator.InitializeAndClearBitmap(transaction) != B_OK)
 		RETURN_ERROR(B_ERROR);
 
 	off_t id;
 	status_t status = Inode::Create(transaction, NULL, NULL,
 		S_DIRECTORY | 0755, 0, 0, NULL, &id, &fRootNode);
-	if (status < B_OK)
+	if (status != B_OK)
 		RETURN_ERROR(status);
 
 	fSuperBlock.root_dir = ToBlockRun(id);
@@ -947,19 +947,19 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 		// when the standard indices are created (or any other).
 		Index index(this);
 		status = index.Create(transaction, "name", B_STRING_TYPE);
-		if (status < B_OK)
+		if (status != B_OK)
 			return status;
 
 		status = index.Create(transaction, "BEOS:APP_SIG", B_STRING_TYPE);
-		if (status < B_OK)
+		if (status != B_OK)
 			return status;
 
 		status = index.Create(transaction, "last_modified", B_INT64_TYPE);
-		if (status < B_OK)
+		if (status != B_OK)
 			return status;
 
 		status = index.Create(transaction, "size", B_INT64_TYPE);
-		if (status < B_OK)
+		if (status != B_OK)
 			return status;
 	}
 

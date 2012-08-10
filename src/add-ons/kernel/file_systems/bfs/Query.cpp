@@ -374,7 +374,7 @@ matchString(char* pattern, char* string)
 						|| pattern[0] == '['
 						|| pattern[0] == '\\') {
 						status_t status = matchString(pattern, string);
-						if (status < B_OK || status == MATCH_OK)
+						if (status != B_OK || status == MATCH_OK)
 							return status;
 					}
 
@@ -488,7 +488,7 @@ Equation::Equation(char** expr)
 
 	if (*start == '"' || *start == '\'') {
 		// string is quoted (start has to be on the beginning of a string)
-		if (ParseQuotedString(&start, &end) < B_OK)
+		if (ParseQuotedString(&start, &end) != B_OK)
 			return;
 
 		// set string to a valid start of the equation symbol
@@ -561,7 +561,7 @@ Equation::Equation(char** expr)
 	start = string;
 	if (*start == '"' || *start == '\'') {
 		// string is quoted (start has to be on the beginning of a string)
-		if (ParseQuotedString(&start, &end) < B_OK)
+		if (ParseQuotedString(&start, &end) != B_OK)
 			return;
 
 		string = end + 2;
@@ -585,7 +585,7 @@ Equation::Equation(char** expr)
 	// patterns are only allowed for these operations (and strings)
 	if (fOp == OP_EQUAL || fOp == OP_UNEQUAL) {
 		fIsPattern = isPattern(fString);
-		if (fIsPattern && isValidPattern(fString) < B_OK) {
+		if (fIsPattern && isValidPattern(fString) != B_OK) {
 			// we only want to have valid patterns; setting fString
 			// to NULL will cause InitCheck() to fail
 			free(fString);
@@ -880,7 +880,7 @@ Equation::Match(Inode* inode, const char* attributeName, int32 type,
 				if (size > INODE_FILE_NAME_LENGTH)
 					size = INODE_FILE_NAME_LENGTH;
 
-				if (attribute->ReadAt(0, buffer, &size) < B_OK) {
+				if (attribute->ReadAt(0, buffer, &size) != B_OK) {
 					inode->ReleaseAttribute(attribute);
 					return B_IO_ERROR;
 				}
@@ -908,7 +908,7 @@ Equation::CalculateScore(Index &index)
 	// And the code could also need some real world testing :-)
 
 	// do we have to operate on a "foreign" index?
-	if (fOp == OP_UNEQUAL || index.SetTo(fAttribute) < B_OK) {
+	if (fOp == OP_UNEQUAL || index.SetTo(fAttribute) != B_OK) {
 		fScore = 0;
 		return;
 	}
@@ -953,7 +953,7 @@ Equation::PrepareQuery(Volume* /*volume*/, Index& index,
 		// Try to get an index that holds all files (name)
 		// Also sets the default type for all attributes without index
 		// to string.
-		type = status < B_OK ? B_STRING_TYPE : index.Type();
+		type = status != B_OK ? B_STRING_TYPE : index.Type();
 
 		if (index.SetTo("name") != B_OK)
 			return B_ENTRY_NOT_FOUND;
@@ -964,7 +964,7 @@ Equation::PrepareQuery(Volume* /*volume*/, Index& index,
 		type = index.Type();
 	}
 
-	if (ConvertValue(type) < B_OK)
+	if (ConvertValue(type) != B_OK)
 		return B_BAD_VALUE;
 
 	BPlusTree* tree = index.Node()->Tree();
@@ -1124,7 +1124,7 @@ Equation::GetNextMatching(Volume* volume, TreeIterator* iterator,
 			dirent->d_pdev = volume->ID();
 			dirent->d_pino = volume->ToVnode(inode->Parent());
 
-			if (inode->GetName(dirent->d_name) < B_OK) {
+			if (inode->GetName(dirent->d_name) != B_OK) {
 				FATAL(("inode %" B_PRIdOFF " in query has no name!\n",
 					inode->BlockNumber()));
 			}
@@ -1236,8 +1236,8 @@ status_t
 Operator::InitCheck()
 {
 	if ((fOp != OP_AND && fOp != OP_OR)
-		|| fLeft == NULL || fLeft->InitCheck() < B_OK
-		|| fRight == NULL || fRight->InitCheck() < B_OK)
+		|| fLeft == NULL || fLeft->InitCheck() != B_OK
+		|| fRight == NULL || fRight->InitCheck() != B_OK)
 		return B_ERROR;
 
 	return B_OK;
@@ -1333,7 +1333,7 @@ Expression::Expression(char* expr)
 		return;
 
 	fTerm = ParseOr(&expr);
-	if (fTerm != NULL && fTerm->InitCheck() < B_OK) {
+	if (fTerm != NULL && fTerm->InitCheck() != B_OK) {
 		FATAL(("Corrupt tree in expression!\n"));
 		delete fTerm;
 		fTerm = NULL;
@@ -1394,7 +1394,7 @@ Expression::ParseEquation(char** expr)
 	}
 
 	Equation* equation = new Equation(expr);
-	if (equation == NULL || equation->InitCheck() < B_OK) {
+	if (equation == NULL || equation->InitCheck() != B_OK) {
 		delete equation;
 		return NULL;
 	}

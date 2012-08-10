@@ -112,7 +112,7 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 	char name[B_FILE_NAME_LENGTH];
 	
 	if (treeName == NULL) {
-		if (inode->GetName(name) < B_OK) {
+		if (inode->GetName(name) != B_OK) {
 			if (inode->IsContainer())
 				strcpy(name, "(dir has no name)");
 			else
@@ -144,7 +144,7 @@ ResizeVisitor::VisitInode(Inode* inode, const char* treeName)
 		// temporary ugliness
 		char realNameBuffer[B_FILE_NAME_LENGTH];
 		const char* realName = realNameBuffer;
-		if (inode->GetName(realNameBuffer) < B_OK)
+		if (inode->GetName(realNameBuffer) != B_OK)
 			realName = NULL;
 
 		ino_t parentDir = GetVolume()->ToBlock(inode->Parent());

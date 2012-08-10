@@ -419,7 +419,7 @@ AllocationGroup::Allocate(Transaction& transaction, uint16 start, int32 length)
 	AllocationBlock cached(volume);
 
 	while (length > 0) {
-		if (cached.SetToWritable(transaction, *this, block) < B_OK) {
+		if (cached.SetToWritable(transaction, *this, block) != B_OK) {
 			fLargestValid = false;
 			RETURN_ERROR(B_IO_ERROR);
 		}
@@ -480,7 +480,7 @@ AllocationGroup::Free(Transaction& transaction, uint16 start, int32 length)
 	AllocationBlock cached(volume);
 
 	while (length > 0) {
-		if (cached.SetToWritable(transaction, *this, block) < B_OK)
+		if (cached.SetToWritable(transaction, *this, block) != B_OK)
 			RETURN_ERROR(B_IO_ERROR);
 
 		T(Block("free-1", block, cached.Block(), volume->BlockSize()));
@@ -599,7 +599,7 @@ BlockAllocator::InitializeAndClearBitmap(Transaction& transaction)
 	// reserve the boot block, the log area, and the block bitmap itself
 	uint32 reservedBlocks = fVolume->Log().Start() + fVolume->Log().Length();
 
-	if (fGroups[0].Allocate(transaction, 0, reservedBlocks) < B_OK) {
+	if (fGroups[0].Allocate(transaction, 0, reservedBlocks) != B_OK) {
 		FATAL(("could not allocate reserved space for block bitmap/log!\n"));
 		return B_ERROR;
 	}
@@ -908,7 +908,7 @@ BlockAllocator::AllocateBlocks(Transaction& transaction, int32 groupIndex,
 			lastBlockEndBit = bitsPerFullBlock;
 
 		for (; block <= lastBlock; block++) {
-			if (cached.SetTo(group, block) < B_OK)
+			if (cached.SetTo(group, block) != B_OK)
 				RETURN_ERROR(B_ERROR);
 
 			T(Block("alloc-in", group.Start() + block, cached.Block(),
@@ -1150,7 +1150,7 @@ BlockAllocator::AllocateBlockRun(Transaction& transaction, block_run run)
 
 	// check that the requested blocks are free
 	for (int32 block = run.Start(); block < end; block++) {
-		if (cached.SetTo(group, block / bitsPerBlock) < B_OK)
+		if (cached.SetTo(group, block / bitsPerBlock) != B_OK)
 			RETURN_ERROR(B_ERROR);
 
 		if (cached.IsUsed(block % bitsPerBlock))
@@ -1273,7 +1273,7 @@ BlockAllocator::_CheckGroup(int32 groupIndex) const
 	int32 currentBit = 0;
 
 	for (uint32 block = 0; block < group.NumBlocks(); block++) {
-		if (cached.SetTo(group, block) < B_OK) {
+		if (cached.SetTo(group, block) != B_OK) {
 			panic("setting group block %d failed\n", (int)block);
 			return;
 		}
