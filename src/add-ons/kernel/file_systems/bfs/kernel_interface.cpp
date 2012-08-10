@@ -2311,7 +2311,12 @@ bfs_resize(int fd, partition_id partitionID, off_t size, disk_job_id job)
 
 	// do the resize
 	ResizeVisitor resizer(volume);
-	return resizer.Resize(size, job);
+	status_t status = resizer.Resize(size, job);
+
+	if (status == B_OK)
+		partition->content_size = size;
+
+	return status;
 #else
 	// fs_shell can't use this interface as it doesn't have the
 	// partion_data concept

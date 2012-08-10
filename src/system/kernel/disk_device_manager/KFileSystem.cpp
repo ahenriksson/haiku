@@ -139,9 +139,6 @@ KFileSystem::Resize(KPartition* partition, off_t size, disk_job_id job)
 
 	result = fModule->resize(fd, partition->ID(), size, job);
 
-	if (result == B_OK)
-		partition->SetContentSize(size);
-
 	close(fd);
 	return result;
 }

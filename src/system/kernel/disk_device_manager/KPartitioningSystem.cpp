@@ -211,9 +211,6 @@ KPartitioningSystem::ResizeChild(KPartition* child, off_t size, disk_job_id job)
 	// let the module do its job
 	result = fModule->resize_child(fd, child->ID(), size, job);
 
-	if (result == B_OK)
-		child->SetSize(size);
-
 	// resize device last if shrinking
 	if (result == B_OK && !growing)
 		result = child->ResizeDevice(size);

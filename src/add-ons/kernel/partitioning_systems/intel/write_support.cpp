@@ -938,8 +938,6 @@ pm_resize(int fd, partition_id partitionID, off_t size, disk_job_id job)
 	// update data stuctures
 	update_disk_device_job_progress(job, 0.0);
 
-// TODO: partition->size is not supposed to be touched.
-	partition->size = validatedSize;
 	partition->content_size = validatedSize;
 
 	// all changes applied
@@ -1803,8 +1801,6 @@ ep_resize(int fd, partition_id partitionID, off_t size, disk_job_id job)
 	// update data stuctures
 	update_disk_device_job_progress(job, 0.0);
 
-	// TODO: partition->size is not supposed to be touched.
-	partition->size = validatedSize;
 	partition->content_size = validatedSize;
 
 	// all changes applied
