@@ -359,28 +359,11 @@ ResizeVisitor::_UpdateParent(Transaction& transaction, Inode* inode,
 	off_t newInodeID, const char* treeName)
 {
 	// get Inode of parent
-	Vnode parentVnode;
+	Vnode parentVnode(GetVolume(), inode->Parent());
 	Inode* parent;
-	status_t status;
-
-	if (inode->IsIndex()) {
-		parent = GetVolume()->IndicesNode();
-		if (parent == NULL) {
-			FATAL(("Tried to update parent of index, but there was no index "
-				"root!\n"));
-			return B_ERROR;
-		}
-
-		if (parent->BlockRun() != inode->Parent()) {
-			FATAL(("Inode parent and index directory did not match!\n"));
-			return B_ERROR;
-		}
-	} else {
-		parentVnode.SetTo(GetVolume(), inode->Parent());
-		status = parentVnode.Get(&parent);
-		if (status != B_OK)
-			return status;
-	}
+	status_t status = parentVnode.Get(&parent);
+	if (status != B_OK)
+		return status;
 
 	parent->WriteLockInTransaction(transaction);
 

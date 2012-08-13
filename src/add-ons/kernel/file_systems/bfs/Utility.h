@@ -125,13 +125,6 @@ is_index(int mode)
 
 
 inline bool
-is_index_root(int mode)
-{
-	return (mode & (S_EXTENDED_TYPES)) == S_INDEX_DIR && !is_index(mode);
-}
-
-
-inline bool
 is_directory(int mode)
 {
 	return (mode & (S_EXTENDED_TYPES | S_IFDIR)) == S_IFDIR;
