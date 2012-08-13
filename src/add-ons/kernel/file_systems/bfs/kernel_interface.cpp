@@ -283,6 +283,17 @@ bfs_get_vnode(fs_volume* _volume, ino_t _id, fs_vnode* _node, int* _type,
 		return B_ERROR;
 	}
 
+	// the index root node is not managed through the VFS layer, so we need
+	// to return the correct object here to avoid having two out of sync
+	// objects for the same inode
+	if (volume->IndicesNode() != NULL && id == volume->IndicesNode()->ID()) {
+		_node->private_node = volume->IndicesNode();
+		_node->ops = &gBFSVnodeOps;
+		*_type = volume->IndicesNode()->Mode();
+		*_flags = 0;
+		return B_OK;
+	}
+
 	// first inode may be after the log area, we don't go through
 	// the hassle and try to load an earlier block from disk
 	if (id < volume->ToBlock(volume->Log()) + volume->Log().Length()
@@ -347,6 +358,11 @@ bfs_put_vnode(fs_volume* _volume, fs_vnode* _node, bool reenter)
 			transaction.Done();
 		}
 	}
+
+	// the index root node Inode object is allocated when the volume is
+	// mounted and should not be deleted here
+	if (volume->IndicesNode() != NULL && inode == volume->IndicesNode())
+		return B_OK;
 
 	delete inode;
 	return B_OK;
