@@ -612,8 +612,8 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 		// TODO: this allocation hint could certainly be improved
 
 	block_run run;
-	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction,
-		hintRun.AllocationGroup(), hintRun.Start(), 1, 1, run, true);
+	status_t status = GetVolume()->Allocator().AllocateBlocks(transaction, 0, 0,
+		1, 1, run);
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
@@ -674,13 +674,6 @@ ResizeVisitor::_MoveInode(Inode* inode, off_t& newInodeID, const char* treeName)
 			FATAL(("_MoveInode: Could not write super block!\n"));
 			return status;
 		}
-	}
-
-	WriteLocker movedInodesLocker(GetVolume()->MovedInodesLock());
-	status = GetVolume()->AddMovedInode(inode->ID(), newInodeID);
-	if (status != B_OK) {
-		FATAL(("_MoveInode: Could not add inode to vnodeID -> inodeID map!\n"));
-		return status;
 	}
 
 	return B_OK;

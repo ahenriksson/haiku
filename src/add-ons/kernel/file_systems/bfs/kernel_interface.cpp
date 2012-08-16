@@ -269,19 +269,11 @@ bfs_sync(fs_volume* _volume)
 /*!	Reads in the node from disk and creates an inode object from it.
 */
 static status_t
-bfs_get_vnode(fs_volume* _volume, ino_t _id, fs_vnode* _node, int* _type,
+bfs_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
 	uint32* _flags, bool reenter)
 {
 	//FUNCTION_START(("ino_t = %Ld\n", id));
 	Volume* volume = (Volume*)_volume->private_volume;
-
-	ino_t id = volume->ResolveVnodeID(_id);
-	if (id != _id) {
-		// TODO: we return an error here for now
-		INFORM(("Denying access to remapped inode, old ID=%" B_PRIdINO
-			", new ID=%" B_PRIdINO "\n", _id, id));
-		return B_ERROR;
-	}
 
 	// the index root node is not managed through the VFS layer, so we need
 	// to return the correct object here to avoid having two out of sync
