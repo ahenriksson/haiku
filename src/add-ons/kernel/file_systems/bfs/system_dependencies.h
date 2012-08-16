@@ -16,10 +16,10 @@
 #else	// !BFS_SHELL
 
 #include <AutoDeleter.h>
+#include <shared/HashMap.h>
 #include <util/AutoLock.h>
 #include <util/DoublyLinkedList.h>
 #include <util/kernel_cpp.h>
-#include <util/OpenHashTable.h>
 #include <util/SinglyLinkedList.h>
 #include <util/Stack.h>
 

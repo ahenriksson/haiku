@@ -60,27 +60,6 @@ private:
 };
 
 
-struct InodeMapValue {
-							InodeMapValue(ino_t oldID, ino_t newID);
-
-			ino_t			fOldID;
-			ino_t			fNewID;
-
-			InodeMapValue*	fNext;
-};
-
-
-struct InodeMapDefinitions {
-	typedef	ino_t			KeyType;
-	typedef InodeMapValue	ValueType;
-
-			size_t			HashKey(ino_t key) const;
-			size_t			Hash(InodeMapValue* value) const;
-			bool			Compare(ino_t key, InodeMapValue* value) const;
-			InodeMapValue*&	GetLink(InodeMapValue* value) const;
-};
-
-
 DeviceOpener::DeviceOpener(const char* device, int mode)
 	:
 	fBlockCache(NULL)
@@ -212,45 +191,6 @@ DeviceOpener::GetSize(off_t* _size, uint32* _blockSize)
 //	#pragma mark -
 
 
-InodeMapValue::InodeMapValue(ino_t oldID, ino_t newID)
-	:
-	fOldID(oldID),
-	fNewID(newID)
-{
-}
-
-
-size_t
-InodeMapDefinitions::HashKey(ino_t key) const
-{
-	return (size_t)(key >> 32) ^ (size_t)key;
-}
-
-
-size_t
-InodeMapDefinitions::Hash(InodeMapValue* value) const
-{
-	return HashKey(value->fOldID);
-}
-
-
-bool
-InodeMapDefinitions::Compare(ino_t key, InodeMapValue* value) const
-{
-	return value->fOldID == key;
-}
-
-
-InodeMapValue*&
-InodeMapDefinitions::GetLink(InodeMapValue* value) const
-{
-	return value->fNext;
-}
-
-
-//	#pragma mark -
-
-
 bool
 disk_super_block::IsValid() const
 {
@@ -356,7 +296,6 @@ Volume::Volume(fs_volume* volume)
 
 Volume::~Volume()
 {
-	FreeMovedInodes();
 	delete fMovedInodes;
 
 	rw_lock_destroy(&fMovedInodesLock);
@@ -620,11 +559,7 @@ Volume::AddMovedInode(ino_t oldID, ino_t newID)
 	if (fMovedInodes == NULL)
 		return B_NO_MEMORY;
 
-	InodeMapValue* newMapping = new(std::nothrow) InodeMapValue(oldID, newID);
-	if (newMapping == NULL)
-		return B_NO_MEMORY;
-
-	return fMovedInodes->Insert(newMapping);
+	return fMovedInodes->Put(oldID, newID);
 }
 
 
@@ -635,17 +570,11 @@ Volume::HasMovedInodes() const
 }
 
 
-void
-Volume::FreeMovedInodes()
+InodeMap::Iterator
+Volume::MovedInodesIterator() const
 {
-	WriteLocker locker(fMovedInodesLock);
-
-	if (fMovedInodes != NULL) {
-		InodeMap::Iterator iterator = fMovedInodes->GetIterator();
-
-		while (iterator.HasNext())
-			delete iterator.Next();
-	}
+	ASSERT(fMovedInodes != NULL);
+	return fMovedInodes->GetIterator();
 }
 
 
@@ -658,10 +587,11 @@ Volume::ResolveVnodeID(ino_t vnodeID)
 	if (fMovedInodes == NULL)
 		return vnodeID;
 
+	ino_t* inodeID;
+
 	// has this inode been moved?
-	InodeMapValue* entry = fMovedInodes->Lookup(vnodeID);
-	if (entry != NULL)
-		return entry->fNewID;
+	if (fMovedInodes->Get(vnodeID, inodeID))
+		return *inodeID;
 
 	return vnodeID;
 }
@@ -673,7 +603,7 @@ Volume::WasMovedInode(ino_t blockNumber)
 	ASSERT(fMovedInodes != NULL);
 	ReadLocker locker(fMovedInodesLock);
 
-	return fMovedInodes->Lookup(blockNumber) != NULL;
+	return fMovedInodes->ContainsKey(blockNumber);
 }
 
 
