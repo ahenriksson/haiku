@@ -275,10 +275,13 @@ bfs_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
 	//FUNCTION_START(("ino_t = %Ld\n", id));
 	Volume* volume = (Volume*)_volume->private_volume;
 
+	off_t blockNumber = volume->VnodeToBlock(id);
+
 	// the index root node is not managed through the VFS layer, so we need
 	// to return the correct object here to avoid having two out of sync
 	// objects for the same inode
-	if (volume->IndicesNode() != NULL && id == volume->IndicesNode()->ID()) {
+	if (volume->IndicesNode() != NULL
+		&& blockNumber == volume->IndicesNode()->BlockNumber()) {
 		_node->private_node = volume->IndicesNode();
 		_node->ops = &gBFSVnodeOps;
 		*_type = volume->IndicesNode()->Mode();
@@ -288,13 +291,13 @@ bfs_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
 
 	// first inode may be after the log area, we don't go through
 	// the hassle and try to load an earlier block from disk
-	if (id < volume->ToBlock(volume->Log()) + volume->Log().Length()
-		|| id > volume->NumBlocks()) {
-		INFORM(("inode at %" B_PRIdINO " requested!\n", id));
+	if (blockNumber < volume->ToBlock(volume->Log()) + volume->Log().Length()
+		|| blockNumber > volume->NumBlocks()) {
+		INFORM(("inode at block %" B_PRIdINO " requested!\n", blockNumber));
 		return B_ERROR;
 	}
 
-	CachedBlock cached(volume, id);
+	CachedBlock cached(volume, blockNumber);
 	bfs_inode* node = (bfs_inode*)cached.Block();
 	if (node == NULL) {
 		FATAL(("could not read inode: %" B_PRIdINO "\n", id));
@@ -312,7 +315,7 @@ bfs_get_vnode(fs_volume* _volume, ino_t id, fs_vnode* _node, int* _type,
 		return status;
 	}
 
-	Inode* inode = new(std::nothrow) Inode(volume, id);
+	Inode* inode = new(std::nothrow) Inode(volume, blockNumber);
 	if (inode == NULL)
 		return B_NO_MEMORY;
 
@@ -599,11 +602,14 @@ bfs_lookup(fs_volume* _volume, fs_vnode* _directory, const char* file,
 	if (tree == NULL)
 		RETURN_ERROR(B_BAD_VALUE);
 
-	status = tree->Find((uint8*)file, (uint16)strlen(file), _vnodeID);
+	off_t blockNumber;
+	status = tree->Find((uint8*)file, (uint16)strlen(file), &blockNumber);
 	if (status != B_OK) {
 		//PRINT(("bfs_walk() could not find %Ld:\"%s\": %s\n", directory->BlockNumber(), file, strerror(status)));
 		return status;
 	}
+
+	*_vnodeID = volume->ToVnode(blockNumber);
 
 	entry_cache_add(volume->ID(), directory->ID(), file, *_vnodeID);
 
@@ -1039,7 +1045,7 @@ bfs_create_symlink(fs_volume* _volume, fs_vnode* _directory, const char* name,
 	Transaction transaction(volume, directory->BlockNumber());
 
 	Inode* link;
-	off_t id;
+	ino_t id;
 	status = Inode::Create(transaction, directory, name, S_SYMLINK | 0777,
 		0, 0, NULL, &id, &link);
 	if (status != B_OK)
@@ -1110,7 +1116,7 @@ bfs_unlink(fs_volume* _volume, fs_vnode* _directory, const char* name)
 
 	Transaction transaction(volume, directory->BlockNumber());
 
-	off_t id;
+	ino_t id;
 	status = directory->Remove(transaction, name, &id);
 	if (status == B_OK) {
 		entry_cache_remove(volume->ID(), directory->ID(), name);
@@ -1159,12 +1165,12 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 	if (tree == NULL)
 		RETURN_ERROR(B_BAD_VALUE);
 
-	off_t id;
-	status = tree->Find((const uint8*)oldName, strlen(oldName), &id);
+	off_t blockNumber;
+	status = tree->Find((const uint8*)oldName, strlen(oldName), &blockNumber);
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
-	Vnode vnode(volume, id);
+	Vnode vnode(volume, blockNumber);
 	Inode* inode;
 	if (vnode.Get(&inode) != B_OK)
 		return B_IO_ERROR;
@@ -1175,13 +1181,13 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 	// If we meet our inode on that way, we have to bail out.
 
 	if (oldDirectory != newDirectory) {
-		ino_t parent = newDirectory->ID();
-		ino_t root = volume->RootNode()->ID();
+		off_t parent = newDirectory->BlockNumber();
+		off_t root = volume->RootNode()->BlockNumber();
 
 		while (true) {
-			if (parent == id)
+			if (parent == blockNumber)
 				return B_BAD_VALUE;
-			else if (parent == root || parent == oldDirectory->ID())
+			else if (parent == root || parent == oldDirectory->BlockNumber())
 				break;
 
 			Vnode vnode(volume, parent);
@@ -1189,7 +1195,7 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 			if (vnode.Get(&parentNode) != B_OK)
 				return B_ERROR;
 
-			parent = volume->ToVnode(parentNode->Parent());
+			parent = volume->ToBlock(parentNode->Parent());
 		}
 	}
 
@@ -1206,7 +1212,7 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 	}
 
 	status = newTree->Insert(transaction, (const uint8*)newName,
-		strlen(newName), id);
+		strlen(newName), blockNumber);
 	if (status == B_NAME_IN_USE) {
 		// If there is already a file with that name, we have to remove
 		// it, as long it's not a directory with files in it
@@ -1214,7 +1220,7 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 		if (newTree->Find((const uint8*)newName, strlen(newName), &clobber)
 				!= B_OK)
 			return B_NAME_IN_USE;
-		if (clobber == id)
+		if (clobber == blockNumber)
 			return B_BAD_VALUE;
 
 		Vnode vnode(volume, clobber);
@@ -1237,7 +1243,7 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 			clobber);
 
 		status = newTree->Insert(transaction, (const uint8*)newName,
-			strlen(newName), id);
+			strlen(newName), blockNumber);
 	}
 	if (status != B_OK)
 		return status;
@@ -1258,7 +1264,7 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 
 	if (status == B_OK) {
 		status = tree->Remove(transaction, (const uint8*)oldName,
-			strlen(oldName), id);
+			strlen(oldName), blockNumber);
 		if (status == B_OK) {
 			inode->Parent() = newDirectory->BlockRun();
 
@@ -1269,11 +1275,12 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 				&& inode->IsDirectory()
 				&& movedTree != NULL) {
 				status = movedTree->Replace(transaction, (const uint8*)"..",
-					2, newDirectory->ID());
+					2, newDirectory->BlockNumber());
 
 				if (status == B_OK) {
 					// update/add the cache entry for the parent
-					entry_cache_add(volume->ID(), id, "..", newDirectory->ID());
+					entry_cache_add(volume->ID(), inode->ID(), "..",
+						newDirectory->ID());
 				}
 			}
 
@@ -1287,17 +1294,19 @@ bfs_rename(fs_volume* _volume, fs_vnode* _oldDir, const char* oldName,
 
 			if (status == B_OK) {
 				entry_cache_remove(volume->ID(), oldDirectory->ID(), oldName);
-				entry_cache_add(volume->ID(), newDirectory->ID(), newName, id);
+				entry_cache_add(volume->ID(), newDirectory->ID(), newName,
+					inode->ID());
 
 				status = transaction.Done();
 				if (status == B_OK) {
 					notify_entry_moved(volume->ID(), oldDirectory->ID(),
-						oldName, newDirectory->ID(), newName, id);
+						oldName, newDirectory->ID(), newName, inode->ID());
 					return B_OK;
 				}
 
 				entry_cache_remove(volume->ID(), newDirectory->ID(), newName);
-				entry_cache_add(volume->ID(), oldDirectory->ID(), oldName, id);
+				entry_cache_add(volume->ID(), oldDirectory->ID(), oldName,
+					inode->ID());
 			}
 		}
 	}
@@ -1605,7 +1614,7 @@ bfs_create_dir(fs_volume* _volume, fs_vnode* _directory, const char* name,
 
 	// Inode::Create() locks the inode if we pass the "id" parameter, but we
 	// need it anyway
-	off_t id;
+	ino_t id;
 	status = Inode::Create(transaction, directory, name,
 		S_DIRECTORY | (mode & S_IUMSK), 0, 0, NULL, &id);
 	if (status == B_OK) {
@@ -1634,7 +1643,7 @@ bfs_remove_dir(fs_volume* _volume, fs_vnode* _directory, const char* name)
 
 	Transaction transaction(volume, directory->BlockNumber());
 
-	off_t id;
+	ino_t id;
 	status_t status = directory->Remove(transaction, name, &id, true);
 	if (status == B_OK) {
 		// Remove the cache entry for the directory and potentially also
@@ -1695,9 +1704,9 @@ bfs_read_dir(fs_volume* _volume, fs_vnode* _node, void* _cookie,
 	TreeIterator* iterator = (TreeIterator*)_cookie;
 
 	uint16 length;
-	ino_t id;
+	off_t blockNumber;
 	status_t status = iterator->GetNextEntry(dirent->d_name, &length,
-		bufferSize, &id);
+		bufferSize, &blockNumber);
 	if (status == B_ENTRY_NOT_FOUND) {
 		*_num = 0;
 		return B_OK;
@@ -1707,7 +1716,7 @@ bfs_read_dir(fs_volume* _volume, fs_vnode* _node, void* _cookie,
 	Volume* volume = (Volume*)_volume->private_volume;
 
 	dirent->d_dev = volume->ID();
-	dirent->d_ino = id;
+	dirent->d_ino = volume->ToVnode(blockNumber);
 
 	dirent->d_reclen = sizeof(struct dirent) + length;
 
@@ -2002,7 +2011,7 @@ bfs_create_special_node(fs_volume* _volume, fs_vnode* _directory,
 
 	Transaction transaction(volume, directory->BlockNumber());
 
-	off_t id;
+	ino_t id;
 	Inode* inode;
 	status = Inode::Create(transaction, directory, name, mode, O_EXCL, 0, NULL,
 		&id, &inode, subVnode ? subVnode->ops : NULL, flags);

@@ -392,10 +392,10 @@ CheckVisitor::_RemoveInvalidNode(Inode* parent, BPlusTree* tree,
 		parent->WriteLockInTransaction(transaction);
 
 		// does the file even exist?
-		off_t id;
-		status = tree->Find((uint8*)name, (uint16)strlen(name), &id);
+		off_t blockNumber;
+		status = tree->Find((uint8*)name, (uint16)strlen(name), &blockNumber);
 		if (status == B_OK)
-			status = tree->Remove(transaction, name, id);
+			status = tree->Remove(transaction, name, blockNumber);
 	}
 
 	if (status == B_OK) {
@@ -729,22 +729,25 @@ CheckVisitor::_AddInodeToIndex(Inode* inode)
 				if (inode->GetName(name, B_FILE_NAME_LENGTH) != B_OK)
 					return B_ERROR;
 
-				status = tree->Insert(transaction, name, inode->ID());
+				status = tree->Insert(transaction, name, inode->BlockNumber());
 			}
 		} else if (!strcmp(index->name, "last_modified")) {
 			if (inode->InLastModifiedIndex()) {
 				status = tree->Insert(transaction, inode->OldLastModified(),
-					inode->ID());
+					inode->BlockNumber());
 			}
 		} else if (!strcmp(index->name, "size")) {
-			if (inode->InSizeIndex())
-				status = tree->Insert(transaction, inode->Size(), inode->ID());
+			if (inode->InSizeIndex()) {
+				status = tree->Insert(transaction, inode->Size(),
+					inode->BlockNumber());
+			}
 		} else {
 			uint8 key[BPLUSTREE_MAX_KEY_LENGTH];
 			size_t keyLength = BPLUSTREE_MAX_KEY_LENGTH;
 			if (inode->ReadAttribute(index->name, B_ANY_TYPE, 0, key,
 					&keyLength) == B_OK) {
-				status = tree->Insert(transaction, key, keyLength, inode->ID());
+				status = tree->Insert(transaction, key, keyLength,
+					inode->BlockNumber());
 			}
 		}
 

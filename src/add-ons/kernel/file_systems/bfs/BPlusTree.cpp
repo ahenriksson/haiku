@@ -297,7 +297,7 @@ CachedNode::SetTo(off_t offset, const bplustree_node** _node, bool check)
 		if (!fTree->fHeader.CheckNode(fNode)) {
 			FATAL(("invalid node [%p] read from offset %" B_PRIdOFF " (block %"
 				B_PRIdOFF "), inode at %" B_PRIdINO "\n", fNode, offset,
-				fBlockNumber, fTree->fStream->ID()));
+				fBlockNumber, fTree->fStream->BlockNumber()));
 			return B_BAD_DATA;
 		}
 	}
@@ -330,7 +330,7 @@ CachedNode::SetToWritable(Transaction& transaction, off_t offset, bool check)
 		if (!fTree->fHeader.CheckNode(fNode)) {
 			FATAL(("invalid node [%p] read from offset %" B_PRIdOFF " (block %"
 				B_PRIdOFF "), inode at %" B_PRIdINO "\n", fNode, offset,
-				fBlockNumber, fTree->fStream->ID()));
+				fBlockNumber, fTree->fStream->BlockNumber()));
 			return NULL;
 		}
 	}

@@ -216,7 +216,7 @@ FileSystemVisitor::Start(uint32 flags)
 		// traversing the file system anymore.
 		InodeList::Iterator iterator = fVolume->RemovedInodes().GetIterator();
 		while (Inode* inode = iterator.Next()) {
-			Vnode vnode(fVolume, inode->ID());
+			Vnode vnode(fVolume, inode->BlockNumber());
 			vnode.Keep();
 			fStack.Push(inode->BlockRun());
 		}

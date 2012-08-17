@@ -92,9 +92,12 @@ public:
 			status_t		ValidateBlockRun(block_run run);
 
 			off_t			ToVnode(block_run run) const
-								{ return ToBlock(run); }
-			off_t			ToVnode(off_t block) const { return block; }
-			off_t			VnodeToBlock(ino_t id) const { return (off_t)id; }
+								{ return ToVnode(ToBlock(run)); }
+			off_t			ToVnode(off_t block) const
+								{ return block ^ (0xff000000); }
+			off_t			VnodeToBlock(ino_t id) const
+								{ return (off_t)id ^ (0xff000000); }
+								// TODO this can fail
 
 			status_t		CreateIndicesRoot(Transaction& transaction);
 

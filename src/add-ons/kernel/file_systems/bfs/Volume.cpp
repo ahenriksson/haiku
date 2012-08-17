@@ -401,7 +401,7 @@ Volume::Mount(const char* deviceName, uint32 flags)
 		return status;
 	}
 
-	fRootNode = new(std::nothrow) Inode(this, ToVnode(Root()));
+	fRootNode = new(std::nothrow) Inode(this, ToBlock(Root()));
 	if (fRootNode != NULL && fRootNode->InitCheck() == B_OK) {
 		status = publish_vnode(fVolume, ToVnode(Root()), (void*)fRootNode,
 			&gBFSVnodeOps, fRootNode->Mode(), 0);
@@ -410,7 +410,7 @@ Volume::Mount(const char* deviceName, uint32 flags)
 
 			if (!Indices().IsZero()) {
 				fIndicesNode = new(std::nothrow) Inode(this,
-					ToVnode(Indices()));
+					ToBlock(Indices()));
 			}
 
 			if (fIndicesNode == NULL
@@ -538,7 +538,7 @@ Volume::CreateIndicesRoot(Transaction& transaction)
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
-	fSuperBlock.indices = ToBlockRun(id);
+	fSuperBlock.indices = ToBlockRun(VnodeToBlock(id));
 	return WriteSuperBlock();
 }
 
@@ -800,13 +800,13 @@ Volume::Initialize(int fd, const char* name, uint32 blockSize,
 	if (fBlockAllocator.InitializeAndClearBitmap(transaction) != B_OK)
 		RETURN_ERROR(B_ERROR);
 
-	off_t id;
+	ino_t id;
 	status_t status = Inode::Create(transaction, NULL, NULL,
 		S_DIRECTORY | 0755, 0, 0, NULL, &id, &fRootNode);
 	if (status != B_OK)
 		RETURN_ERROR(status);
 
-	fSuperBlock.root_dir = ToBlockRun(id);
+	fSuperBlock.root_dir = ToBlockRun(VnodeToBlock(id));
 
 	if ((flags & VOLUME_NO_INDICES) == 0) {
 		// The indices root directory will be created automatically

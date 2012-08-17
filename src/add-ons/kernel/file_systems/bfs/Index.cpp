@@ -253,7 +253,7 @@ Index::Update(Transaction& transaction, const char* name, int32 type,
 
 	if (oldKey != NULL) {
 		status = tree->Remove(transaction, (const uint8*)oldKey, oldLength,
-			inode->ID());
+			inode->BlockNumber());
 		if (status == B_ENTRY_NOT_FOUND) {
 			// That's not nice, but no reason to let the whole thing fail
 			INFORM(("Could not find value in index \"%s\"!\n", name));
@@ -265,7 +265,7 @@ Index::Update(Transaction& transaction, const char* name, int32 type,
 
 	if (newKey != NULL) {
 		status = tree->Insert(transaction, (const uint8*)newKey, newLength,
-			inode->ID());
+			inode->BlockNumber());
 	}
 
 	RETURN_ERROR(status);
